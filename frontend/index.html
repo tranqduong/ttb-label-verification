@@ -465,9 +465,12 @@
         <h2 class="section-title">Uploaded label image</h2>
         <div class="section-sub">A clear, well-lit, straight-on photo works best.</div>
         <div class="dropzone" id="single-dropzone">
-          <div class="dz-icon">📤</div>
-          <div class="dz-primary">Drag &amp; drop a label photo here</div>
-          <div class="dz-secondary">or click to browse — JPG or PNG</div>
+          <div class="dz-placeholder">
+            <div class="dz-icon">📤</div>
+            <div class="dz-primary">Drag &amp; drop a label photo here</div>
+            <div class="dz-secondary">or click to browse — JPG or PNG</div>
+          </div>
+          <div class="dz-preview" style="display:none"></div>
           <input type="file" id="single-image" accept="image/*" />
         </div>
       </div>
@@ -475,6 +478,9 @@
       <div class="card">
         <h2 class="section-title">Application fields (filed data)</h2>
         <div class="section-sub">Enter exactly what was filed on the COLA application — this is what the label will be checked against.</div>
+
+        <button type="button" class="secondary" id="s-autofill" style="margin-bottom:14px;">Auto-fill from photo</button>
+        <span id="s-autofill-status" class="section-sub" style="display:none; margin-bottom:14px;"></span>
 
         <div class="fields-grid">
           <div>
@@ -690,6 +696,62 @@ function showStatusBanner(status, brandName) {
   document.getElementById("review-meta").textContent = "Automated verification complete — review the field-by-field results below.";
 }
 
+document.getElementById("s-autofill").addEventListener("click", async () => {
+  const errorBox = document.getElementById("error-box");
+  const statusEl = document.getElementById("s-autofill-status");
+  const btn = document.getElementById("s-autofill");
+  errorBox.style.display = "none";
+
+  const imageInput = document.getElementById("single-image");
+  if (!imageInput.files.length) {
+    errorBox.textContent = "Upload a label photo first, then auto-fill will read it.";
+    errorBox.style.display = "block";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("label_image", imageInput.files[0]);
+
+  btn.disabled = true;
+  statusEl.style.display = "inline";
+  statusEl.textContent = "Reading label photo…";
+
+  try {
+    const resp = await fetch(`${API_BASE}/extract`, { method: "POST", body: formData });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `Extraction failed (HTTP ${resp.status})`);
+    }
+    const extracted = await resp.json();
+
+    const setIfPresent = (id, value) => {
+      if (value && value !== "UNREADABLE") document.getElementById(id).value = value;
+    };
+    setIfPresent("s-brand-name", extracted.brand_name);
+    setIfPresent("s-class-type", extracted.class_type);
+    setIfPresent("s-abv", extracted.alcohol_content);
+    setIfPresent("s-net-contents", extracted.net_contents);
+    setIfPresent("s-bottler", extracted.bottler_info);
+
+    if (extracted.country_of_origin) {
+      document.getElementById("s-is-import").value = "true";
+      document.getElementById("s-is-import").dispatchEvent(new Event("change"));
+      setIfPresent("s-country", extracted.country_of_origin);
+    }
+
+    statusEl.textContent = "Filled in from the photo — review against the actual filed COLA data before verifying.";
+    if (extracted.extraction_confidence && extracted.extraction_confidence !== "high") {
+      statusEl.textContent += ` (extraction confidence: ${extracted.extraction_confidence})`;
+    }
+  } catch (err) {
+    errorBox.textContent = err.message || "Auto-fill failed.";
+    errorBox.style.display = "block";
+    statusEl.style.display = "none";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("s-submit").addEventListener("click", async () => {
   const errorBox = document.getElementById("error-box");
   errorBox.style.display = "none";
@@ -808,10 +870,19 @@ function wireDropzone(zoneId, inputId, onFilesChanged) {
 
 wireDropzone("single-dropzone", "single-image", (files) => {
   const zone = document.getElementById("single-dropzone");
-  if (!files.length) { zone.classList.remove("has-preview"); return; }
+  const placeholder = zone.querySelector(".dz-placeholder");
+  const preview = zone.querySelector(".dz-preview");
+  if (!files.length) {
+    zone.classList.remove("has-preview");
+    placeholder.style.display = "";
+    preview.style.display = "none";
+    return;
+  }
   const url = URL.createObjectURL(files[0]);
   zone.classList.add("has-preview");
-  zone.innerHTML = `<img class="preview-img" src="${url}" alt="Label preview" />
+  placeholder.style.display = "none";
+  preview.style.display = "block";
+  preview.innerHTML = `<img class="preview-img" src="${url}" alt="Label preview" />
     <div class="dz-caption">${escapeHtml(files[0].name)} — click to choose a different photo</div>`;
 });
 

@@ -9,6 +9,7 @@ from app.models.schemas import (
     ApplicationData,
     BatchItemResult,
     BatchVerificationResult,
+    ExtractedLabel,
     VerificationResult,
 )
 from app.services.extraction import extract_label_fields
@@ -36,6 +37,33 @@ async def _run_single_verification(image_bytes: bytes, filename: str, applicatio
         processing_time_ms=total_ms,
         label_filename=filename,
     )
+
+
+@router.post("/extract", response_model=ExtractedLabel)
+async def extract_label(
+    label_image: UploadFile = File(...),
+):
+    """Read-only vision extraction, with no application data to compare against.
+
+    Powers the frontend's "Auto-fill from photo" button: an agent can upload
+    a label and have the (as-printed) fields pre-filled as a starting point,
+    then edit any that should instead reflect the actual filed COLA
+    application before running /verify. This intentionally reuses the exact
+    same extraction call /verify uses, so what gets pre-filled is consistent
+    with what verification will read from the same photo.
+    """
+    image_bytes = await label_image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="Uploaded label image is empty.")
+
+    try:
+        extracted, _elapsed_ms = await asyncio.to_thread(
+            extract_label_fields, image_bytes, label_image.filename or "label.jpg"
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return extracted
 
 
 @router.post("/verify", response_model=VerificationResult)
