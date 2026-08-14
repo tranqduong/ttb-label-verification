@@ -6,11 +6,6 @@
 <title>TTB Label Verification</title>
 <style>
   :root {
-    /* Semantic status colors — deliberately muted/desaturated so the UI
-       reads as a calm, trustworthy government tool rather than a flashy
-       consumer app, while staying clearly distinguishable and accessible
-       at normal text sizes (not relying on color alone: every status also
-       carries a text label). */
     --pass: #1a7f4a;
     --pass-bg: #eaf7ee;
     --pass-border: #b7e4c4;
@@ -24,16 +19,15 @@
     --neutral-bg: #f0f2f4;
     --neutral-border: #dde1e6;
 
-    /* Neutral / brand scale */
     --ink: #16211f;
-    --ink-soft: #4a5551;
-    --line: #dfe4e2;
-    --line-soft: #ecefee;
+    --ink-soft: #5b6360;
+    --line: #e3e6e5;
+    --line-soft: #eef0ef;
     --surface: #ffffff;
-    --canvas: #f4f6f5;
-    --brand: #0e3b34;
-    --brand-hover: #0a2e29;
-    --brand-tint: #e7f0ee;
+    --canvas: #f5f6f7;
+    --brand: #16181b;
+    --brand-hover: #000000;
+    --brand-tint: #f0f1f2;
 
     --radius: 10px;
     --radius-sm: 7px;
@@ -51,46 +45,53 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  header {
-    background: var(--brand);
-    color: white;
-    padding: 22px 32px;
+  /* ---------- Top nav (Label Review System) ---------- */
+  .topnav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 28px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    justify-content: space-between;
   }
-  header .mark {
-    width: 40px; height: 40px;
-    background: rgba(255,255,255,0.12);
-    border-radius: 9px;
+  .topnav-left { display: flex; align-items: center; gap: 12px; }
+  .topnav .mark {
+    width: 30px; height: 30px;
+    background: var(--brand);
+    border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
+    font-size: 15px;
     flex-shrink: 0;
   }
-  header h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
-  header p { margin: 3px 0 0; font-size: 13.5px; color: rgba(255,255,255,0.72); }
+  .app-name { font-size: 14.5px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+  .breadcrumb { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
+  .breadcrumb span.current { color: var(--ink); font-weight: 600; }
+  .topnav-right { display: flex; align-items: center; gap: 10px; }
+  .proto-tag {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    background: var(--neutral-bg);
+    border: 1px solid var(--neutral-border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
 
   main {
-    max-width: 880px;
-    margin: 32px auto 0;
+    max-width: 1020px;
+    margin: 28px auto 0;
     padding: 0 24px;
   }
 
-  h2.section-title {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ink-soft);
-    margin: 0 0 14px;
-  }
-
+  /* ---------- Tab pills ---------- */
   .tabs {
     display: inline-flex;
     padding: 4px;
     background: var(--line-soft);
     border-radius: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
   }
   .tab-btn {
     padding: 9px 22px;
@@ -104,34 +105,82 @@
     transition: background 0.12s ease, color 0.12s ease;
   }
   .tab-btn.active {
-    background: var(--surface);
-    color: var(--brand);
-    box-shadow: var(--shadow);
+    background: var(--brand);
+    color: white;
   }
+
+  /* ---------- Page head (title + status pill) ---------- */
+  .page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .page-head h1 { margin: 0; font-size: 23px; font-weight: 750; letter-spacing: -0.01em; }
+  .page-head .page-meta { font-size: 13px; color: var(--ink-soft); margin-top: 5px; }
+  .status-pill {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .status-pill.pass { background: var(--pass-bg); color: var(--pass); }
+  .status-pill.fail { background: var(--fail-bg); color: var(--fail); }
+  .status-pill.needs_review, .status-pill.pending { background: var(--review-bg); color: var(--review); }
+
+  h2.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    margin: 0 0 4px;
+  }
+  .section-sub { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 14px; }
 
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    padding: 26px 28px;
+    padding: 22px 24px;
     margin-bottom: 20px;
     box-shadow: var(--shadow);
   }
 
+  /* ---------- Two-column review grid ---------- */
+  .review-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 760px) { .review-grid { grid-template-columns: 1fr; } }
+
   label {
     display: block;
     font-weight: 600;
-    font-size: 13.5px;
-    color: var(--ink);
-    margin: 16px 0 6px;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink-soft);
+    margin: 14px 0 6px;
   }
   label:first-of-type { margin-top: 0; }
-  .label-hint { font-weight: 400; color: var(--ink-soft); }
+  .label-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-soft); }
 
   input[type=text], select, textarea {
     width: 100%;
     padding: 10px 12px;
-    font-size: 14.5px;
+    font-size: 14px;
     font-family: inherit;
     color: var(--ink);
     border: 1.5px solid var(--line);
@@ -147,8 +196,7 @@
     margin-top: 8px;
     font-size: 13.5px;
   }
-  .row { display: flex; gap: 18px; }
-  .row > div { flex: 1; }
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
   .hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
 
   button.primary {
@@ -178,45 +226,66 @@
   }
   button.secondary:hover { border-color: var(--brand); color: var(--brand); }
 
-  #status-banner {
+  #error-box {
     display: none;
-    align-items: center;
-    gap: 10px;
-    padding: 15px 20px;
+    background: var(--fail-bg);
+    color: var(--fail);
+    border: 1.5px solid var(--fail-border);
+    padding: 13px 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 18px;
+    font-size: 13.5px;
+  }
+
+  .dropzone {
+    border: 1.5px dashed var(--line);
     border-radius: var(--radius);
-    font-size: 16px;
-    font-weight: 650;
-    margin-bottom: 16px;
-    border: 1.5px solid transparent;
+    background: var(--canvas);
+    padding: 22px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
   }
-  #status-banner.pass { background: var(--pass-bg); color: var(--pass); border-color: var(--pass-border); display: flex; }
-  #status-banner.fail { background: var(--fail-bg); color: var(--fail); border-color: var(--fail-border); display: flex; }
-  #status-banner.needs_review { background: var(--review-bg); color: var(--review); border-color: var(--review-border); display: flex; }
+  .dropzone.has-preview { padding: 10px; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--brand); background: var(--brand-tint); }
+  .dropzone .dz-icon { font-size: 20px; margin-bottom: 6px; }
+  .dropzone .dz-primary { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+  .dropzone .dz-secondary { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+  .dropzone .dz-filelist { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; text-align: left; max-height: 90px; overflow-y: auto; }
+  .dropzone input[type=file] { display: none; }
+  .dropzone img.preview-img { max-width: 100%; max-height: 260px; border-radius: 6px; display: block; margin: 0 auto; }
+  .dz-caption { font-size: 11.5px; color: var(--ink-soft); text-align: center; margin-top: 8px; }
 
-  .field-row {
-    display: flex;
-    align-items: stretch;
-    gap: 16px;
-    padding: 15px 0;
+  /* ---------- Results table ---------- */
+  .results-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .results-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    padding: 0 10px 10px;
+    border-bottom: 1.5px solid var(--line);
+    white-space: nowrap;
+  }
+  .results-table td {
+    padding: 12px 10px;
     border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
   }
-  .field-row:last-child { border-bottom: none; }
-  .field-accent {
-    width: 4px;
-    flex-shrink: 0;
-    border-radius: 3px;
-    background: var(--neutral-border);
-  }
-  .field-accent.pass { background: var(--pass); }
-  .field-accent.fail { background: var(--fail); }
-  .field-accent.needs_review, .field-accent.warning { background: var(--review); }
-
-  .field-body { flex: 1; min-width: 0; }
-  .field-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .field-name { font-weight: 650; font-size: 14.5px; text-transform: capitalize; }
+  .results-table tr:last-child td { border-bottom: none; }
+  .results-table tr.pass td:first-child { border-left: 3px solid var(--pass); }
+  .results-table tr.fail td:first-child { border-left: 3px solid var(--fail); }
+  .results-table tr.needs_review td:first-child, .results-table tr.warning td:first-child { border-left: 3px solid var(--review); }
+  .results-table tr.not_applicable td:first-child { border-left: 3px solid var(--neutral-border); }
+  .results-table td:first-child { font-weight: 650; text-transform: capitalize; padding-left: 12px; }
+  .results-table .cell-muted { color: var(--ink-soft); font-style: italic; }
+  .results-table .cell-reason { color: var(--ink-soft); max-width: 260px; }
 
   .badge {
     flex-shrink: 0;
+    display: inline-block;
     padding: 3px 10px;
     border-radius: 20px;
     font-size: 11px;
@@ -229,17 +298,13 @@
   .badge.fail { background: var(--fail-bg); color: var(--fail); }
   .badge.warning, .badge.needs_review { background: var(--review-bg); color: var(--review); }
   .badge.not_applicable { background: var(--neutral-bg); color: var(--neutral); }
-
-  .field-values { font-size: 13.5px; color: var(--ink-soft); margin: 4px 0 3px; line-height: 1.5; }
-  .field-values b { color: var(--ink); font-weight: 600; }
-  .field-reason { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+  .badge.error { background: var(--fail-bg); color: var(--fail); }
 
   #loading {
     display: none;
     font-size: 14px;
     color: var(--ink-soft);
     margin: 14px 0 0;
-    display: none;
     align-items: center;
     gap: 8px;
   }
@@ -252,43 +317,9 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  #error-box {
-    display: none;
-    background: var(--fail-bg);
-    color: var(--fail);
-    border: 1.5px solid var(--fail-border);
-    padding: 13px 16px;
-    border-radius: var(--radius-sm);
-    margin-bottom: 18px;
-    font-size: 13.5px;
-  }
-
-  .batch-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 13px 16px;
-    border: 1.5px solid var(--line);
-    border-radius: var(--radius-sm);
-    margin-bottom: 8px;
-    cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease;
-  }
-  .batch-item:hover { background: var(--brand-tint); border-color: var(--brand); }
-  .batch-item span:first-child { font-size: 13.5px; font-weight: 550; }
-
-  .batch-summary {
-    display: flex;
-    gap: 28px;
-    margin-bottom: 18px;
-    font-size: 13px;
-    color: var(--ink-soft);
-    flex-wrap: wrap;
-  }
-  .batch-summary b { font-size: 24px; display: block; color: var(--ink); font-weight: 700; }
-
-  #batch-rows { display: none; margin-top: 18px; }
-
+  /* ---------- Decision panel ---------- */
+  .decision-note { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; }
+  .decision-note b { color: var(--fail); font-weight: 700; }
   .decision-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .decision-btn {
     display: flex; align-items: center; gap: 8px;
@@ -299,11 +330,13 @@
     cursor: pointer;
     border: 1.5px solid transparent;
     transition: filter 0.12s ease;
+    background: var(--surface);
   }
   .decision-btn:hover { filter: brightness(0.97); }
-  .decision-btn.approve { background: var(--pass-bg); color: var(--pass); border-color: var(--pass-border); }
-  .decision-btn.reject { background: var(--fail-bg); color: var(--fail); border-color: var(--fail-border); }
-  .decision-btn.flag { background: var(--review-bg); color: var(--review); border-color: var(--review-border); }
+  .decision-btn.flag { color: var(--review); border-color: var(--review-border); background: var(--surface); }
+  .decision-btn.reject { color: var(--fail); border-color: var(--fail-border); background: var(--surface); }
+  .decision-btn.approve { background: var(--pass); color: white; border-color: var(--pass); }
+  .decision-log { font-size: 12px; color: var(--ink-soft); margin-top: 12px; }
 
   .modal-backdrop {
     display: none;
@@ -325,22 +358,6 @@
   }
   .modal h3 { margin-top: 0; }
 
-  .dropzone {
-    border: 1.5px dashed var(--line);
-    border-radius: var(--radius);
-    background: var(--canvas);
-    padding: 28px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease;
-  }
-  .dropzone:hover, .dropzone.dragover { border-color: var(--brand); background: var(--brand-tint); }
-  .dropzone .dz-icon { font-size: 22px; margin-bottom: 6px; }
-  .dropzone .dz-primary { font-size: 14.5px; font-weight: 650; color: var(--ink); }
-  .dropzone .dz-secondary { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
-  .dropzone .dz-filelist { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; text-align: left; max-height: 90px; overflow-y: auto; }
-  .dropzone input[type=file] { display: none; }
-
   .progress-track {
     height: 8px;
     background: var(--line-soft);
@@ -357,18 +374,71 @@
   }
   .progress-label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
 
+  /* ---------- Batch stats row (Ã  la ingestion dashboard) ---------- */
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-tile {
+    flex: 1;
+    min-width: 100px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+  .stat-tile b { display: block; font-size: 22px; font-weight: 750; color: var(--ink); }
+  .stat-tile span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+  .stat-tile.pass b { color: var(--pass); }
+  .stat-tile.fail b { color: var(--fail); }
+  .stat-tile.review b { color: var(--review); }
+  .stat-tile.error b { color: var(--fail); }
+
   .table-toolbar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
   .table-toolbar input[type=text] { flex: 1; min-width: 160px; }
   .table-toolbar select { width: auto; }
+
+  .batch-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .batch-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    padding: 0 10px 10px;
+    border-bottom: 1.5px solid var(--line);
+    white-space: nowrap;
+  }
+  .batch-table td {
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
+  .batch-table tr { cursor: pointer; }
+  .batch-table tr:hover td { background: var(--brand-tint); }
+  .batch-table .swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .batch-table .swatch.pass { background: var(--pass); }
+  .batch-table .swatch.fail { background: var(--fail); }
+  .batch-table .swatch.needs_review { background: var(--review); }
+  .batch-table .swatch.error { background: var(--neutral); }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="mark">🏷</div>
-  <div>
-    <h1>TTB Label Verification</h1>
-    <p>Upload a label photo and the filed application data — get a field-by-field result in seconds.</p>
+<header class="topnav">
+  <div class="topnav-left">
+    <div class="mark">🏷</div>
+    <div>
+      <div class="app-name">TTB Label Review System</div>
+      <div class="breadcrumb">Applications &nbsp;›&nbsp; <span class="current" id="breadcrumb-page">Single Label Review</span></div>
+    </div>
+  </div>
+  <div class="topnav-right">
+    <span class="proto-tag">Prototype build</span>
   </div>
 </header>
 
@@ -379,89 +449,114 @@
   </div>
 
   <!-- SINGLE LABEL TAB -->
-  <div id="tab-single" class="card">
-    <h2 class="section-title">Label &amp; application details</h2>
+  <div id="tab-single">
+    <div class="page-head">
+      <div>
+        <h1 id="review-title">New Label Verification</h1>
+        <div class="page-meta" id="review-meta">Upload a label photo and enter the filed application data to begin.</div>
+      </div>
+      <div class="status-pill" id="review-status-pill" style="display:none"></div>
+    </div>
+
     <div id="error-box"></div>
 
-    <label>Label photo</label>
-    <div class="dropzone" id="single-dropzone">
-      <div class="dz-icon">📤</div>
-      <div class="dz-primary">Drag &amp; drop a label photo here</div>
-      <div class="dz-secondary">or click to browse — JPG or PNG</div>
-      <div class="dz-filelist" id="single-file-name"></div>
-      <input type="file" id="single-image" accept="image/*" />
+    <div class="review-grid">
+      <div class="card">
+        <h2 class="section-title">Uploaded label image</h2>
+        <div class="section-sub">A clear, well-lit, straight-on photo works best.</div>
+        <div class="dropzone" id="single-dropzone">
+          <div class="dz-icon">📤</div>
+          <div class="dz-primary">Drag &amp; drop a label photo here</div>
+          <div class="dz-secondary">or click to browse — JPG or PNG</div>
+          <input type="file" id="single-image" accept="image/*" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">Application fields (filed data)</h2>
+        <div class="section-sub">Enter exactly what was filed on the COLA application — this is what the label will be checked against.</div>
+
+        <div class="fields-grid">
+          <div>
+            <label>Brand name <span class="label-hint">(as filed)</span></label>
+            <input type="text" id="s-brand-name" placeholder="OLD TOM DISTILLERY" />
+          </div>
+          <div>
+            <label>Class/type designation <span class="label-hint">(as filed)</span></label>
+            <input type="text" id="s-class-type" placeholder="Kentucky Straight Bourbon Whiskey" />
+          </div>
+          <div>
+            <label>Alcohol content <span class="label-hint">(optional)</span></label>
+            <input type="text" id="s-abv" placeholder="45% Alc./Vol. (90 Proof)" />
+          </div>
+          <div>
+            <label>Net contents <span class="label-hint">(as filed)</span></label>
+            <input type="text" id="s-net-contents" placeholder="750 mL" />
+          </div>
+          <div>
+            <label>Bottler / producer name <span class="label-hint">(optional)</span></label>
+            <input type="text" id="s-bottler" placeholder="Old Tom Distillery, Bardstown, KY" />
+          </div>
+          <div>
+            <label>Beverage type</label>
+            <select id="s-beverage-type">
+              <option value="distilled_spirits">Distilled Spirits</option>
+              <option value="wine">Wine</option>
+              <option value="beer">Beer</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label>Is this an import?</label>
+            <select id="s-is-import">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+          <div>
+            <label id="s-country-label" style="display:none">Country of origin <span class="label-hint">(as filed)</span></label>
+            <input type="text" id="s-country" style="display:none" placeholder="Scotland" />
+          </div>
+        </div>
+
+        <button class="primary" id="s-submit">Verify Label</button>
+        <div id="loading"><span class="spinner"></span> Analyzing label — this usually takes a few seconds.</div>
+      </div>
     </div>
-    <div class="hint">A clear, well-lit, straight-on photo works best.</div>
-
-    <div class="row">
-      <div>
-        <label>Beverage type</label>
-        <select id="s-beverage-type">
-          <option value="distilled_spirits">Distilled Spirits</option>
-          <option value="wine">Wine</option>
-          <option value="beer">Beer</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div>
-        <label>Is this an import?</label>
-        <select id="s-is-import">
-          <option value="false">No</option>
-          <option value="true">Yes</option>
-        </select>
-      </div>
-    </div>
-
-    <label>Brand name <span class="label-hint">(as filed)</span></label>
-    <input type="text" id="s-brand-name" placeholder="OLD TOM DISTILLERY" />
-
-    <label>Class/type designation <span class="label-hint">(as filed)</span></label>
-    <input type="text" id="s-class-type" placeholder="Kentucky Straight Bourbon Whiskey" />
-
-    <div class="row">
-      <div>
-        <label>Alcohol content <span class="label-hint">(optional)</span></label>
-        <input type="text" id="s-abv" placeholder="45% Alc./Vol. (90 Proof)" />
-      </div>
-      <div>
-        <label>Net contents <span class="label-hint">(as filed)</span></label>
-        <input type="text" id="s-net-contents" placeholder="750 mL" />
-      </div>
-    </div>
-
-    <label>Bottler / producer name &amp; address <span class="label-hint">(optional)</span></label>
-    <input type="text" id="s-bottler" placeholder="Old Tom Distillery, Bardstown, KY" />
-
-    <label id="s-country-label" style="display:none">Country of origin <span class="label-hint">(as filed)</span></label>
-    <input type="text" id="s-country" style="display:none" placeholder="Scotland" />
-
-    <button class="primary" id="s-submit">Verify Label</button>
-    <div id="loading"><span class="spinner"></span> Analyzing label — this usually takes a few seconds.</div>
   </div>
 
   <div id="results" style="display:none">
-    <div id="status-banner"></div>
     <div class="card">
-      <h2 class="section-title">Field-by-field results</h2>
-      <div id="field-results"></div>
+      <h2 class="section-title">Automated regulatory verification</h2>
+      <div class="section-sub">Comparing visual extraction from the uploaded label image against the filed application fields.</div>
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Value on label</th>
+            <th>Value in application</th>
+            <th>Status</th>
+            <th>Regulatory / audit comment</th>
+          </tr>
+        </thead>
+        <tbody id="field-results"></tbody>
+      </table>
     </div>
     <div class="card">
-      <h2 class="section-title">Agent decision</h2>
-      <div class="hint" style="margin-bottom:14px">
-        This tool suggests a verdict — the agent makes the call. Reject and Flag require a short comment.
-      </div>
+      <h2 class="section-title">Reviewer decision &amp; audit log</h2>
+      <div class="decision-note"><b>*</b> A short comment is required for Reject or Flag actions.</div>
       <div class="decision-row">
-        <button class="decision-btn approve" data-decision="approve">✅ Approve</button>
-        <button class="decision-btn reject" data-decision="reject">❌ Reject</button>
         <button class="decision-btn flag" data-decision="flag">🚩 Flag for Manual Review</button>
+        <button class="decision-btn reject" data-decision="reject">⛔ Reject Application</button>
+        <button class="decision-btn approve" data-decision="approve">✅ Approve Label</button>
       </div>
       <div id="decision-comment-wrap" style="display:none; margin-top:16px;">
-        <label>Comment <span class="label-hint">(required)</span></label>
+        <label style="margin-top:0">Comment <span class="label-hint">(required)</span></label>
         <input type="text" id="decision-comment" placeholder="Briefly explain why..." />
         <button class="secondary" id="decision-confirm" style="margin-top:12px">Confirm</button>
       </div>
       <div id="decision-outcome" style="display:none; margin-top:16px; padding:13px 16px; border-radius:7px; font-size:14px; font-weight:600;"></div>
-      <div class="hint" style="margin-top:14px">
+      <div class="decision-log">
         Prototype note: this decision is recorded for this session only (no database in this build) — a production
         version would persist it against the application record and route it back into the queue.
       </div>
@@ -469,54 +564,69 @@
   </div>
 
   <!-- BATCH TAB -->
-  <div id="tab-batch" class="card" style="display:none">
-    <h2 class="section-title">Batch upload</h2>
-    <div id="batch-error-box" class="hint" style="color:var(--fail); margin-bottom:8px;"></div>
-    <label>Label photos <span class="label-hint">(select multiple)</span></label>
-    <div class="dropzone" id="batch-dropzone">
-      <div class="dz-icon">📤</div>
-      <div class="dz-primary">Drag &amp; drop label photos here</div>
-      <div class="dz-secondary">or click to browse — up to 300 files at once</div>
-      <div class="dz-filelist" id="batch-file-list"></div>
-      <input type="file" id="batch-images" accept="image/*" multiple />
+  <div id="tab-batch" style="display:none">
+    <div class="page-head">
+      <div>
+        <h1>Label Ingestion &amp; Verification</h1>
+        <div class="page-meta">Upload a batch of label photos with matching application data — items are processed concurrently.</div>
+      </div>
     </div>
 
-    <label>Application data <span class="label-hint">(JSON array, one entry per image, same order)</span></label>
-    <textarea id="batch-json" rows="10" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:13px;" placeholder='[
+    <div class="card">
+      <div id="batch-error-box" class="hint" style="color:var(--fail); margin-bottom:8px;"></div>
+      <label style="margin-top:0">Label photos <span class="label-hint">(select multiple)</span></label>
+      <div class="dropzone" id="batch-dropzone">
+        <div class="dz-icon">📤</div>
+        <div class="dz-primary">Drag &amp; drop label photos here</div>
+        <div class="dz-secondary">or click to browse — up to 300 files at once</div>
+        <div class="dz-filelist" id="batch-file-list"></div>
+        <input type="file" id="batch-images" accept="image/*" multiple />
+      </div>
+
+      <label>Application data <span class="label-hint">(JSON array, one entry per image, same order)</span></label>
+      <textarea id="batch-json" rows="9" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:13px;" placeholder='[
   {"brand_name": "OLD TOM DISTILLERY", "class_type": "Kentucky Straight Bourbon Whiskey", "alcohol_content": "45% Alc./Vol.", "net_contents": "750 mL"},
   {"brand_name": "...", "class_type": "...", "net_contents": "750 mL"}
 ]'></textarea>
-    <div class="hint">Tip: for a quick demo, load the sample batch below instead of typing this by hand.</div>
-    <button class="secondary" id="load-sample-batch" style="margin-top:10px">Load sample batch data</button>
+      <div class="hint">Tip: for a quick demo, load the sample batch below instead of typing this by hand.</div>
+      <button class="secondary" id="load-sample-batch" style="margin-top:10px">Load sample batch data</button>
 
-    <div><button class="primary" id="batch-submit">Verify Batch</button></div>
-    <div id="batch-loading" style="display:none">
-      <div class="hint" id="batch-loading-label">⏳ Processing batch — items run concurrently…</div>
-      <div class="progress-track"><div class="progress-fill" id="batch-progress-fill"></div></div>
-      <div class="progress-label"><span id="batch-progress-count">0 / 0 processed</span><span id="batch-progress-pct">0%</span></div>
+      <div><button class="primary" id="batch-submit">Verify Batch</button></div>
+      <div id="batch-loading" style="display:none">
+        <div class="hint" id="batch-loading-label">⏳ Ingesting &amp; verifying labels…</div>
+        <div class="progress-track"><div class="progress-fill" id="batch-progress-fill"></div></div>
+        <div class="progress-label"><span id="batch-progress-count">0 / 0 processed</span><span id="batch-progress-pct">0%</span></div>
+      </div>
     </div>
   </div>
 
-  <div id="batch-rows">
-    <div class="batch-summary">
-      <div><b id="b-total">0</b>Total</div>
-      <div><b id="b-pass" style="color:var(--pass)">0</b>Passed</div>
-      <div><b id="b-fail" style="color:var(--fail)">0</b>Failed</div>
-      <div><b id="b-review" style="color:var(--review)">0</b>Needs Review</div>
-      <div><b id="b-error" style="color:var(--fail)">0</b>Errors</div>
+  <div id="batch-rows" style="display:none">
+    <div class="stats-row">
+      <div class="stat-tile"><b id="b-total">0</b><span>Total</span></div>
+      <div class="stat-tile pass"><b id="b-pass">0</b><span>Passed</span></div>
+      <div class="stat-tile fail"><b id="b-fail">0</b><span>Failed</span></div>
+      <div class="stat-tile review"><b id="b-review">0</b><span>Needs Review</span></div>
+      <div class="stat-tile error"><b id="b-error">0</b><span>Errors</span></div>
     </div>
-    <div class="table-toolbar">
-      <input type="text" id="batch-search" placeholder="Search by filename…" />
-      <select id="batch-filter">
-        <option value="all">All verdicts</option>
-        <option value="pass">Passed only</option>
-        <option value="fail">Failed only</option>
-        <option value="needs_review">Needs review only</option>
-        <option value="error">Errors only</option>
-      </select>
-      <button class="secondary" id="batch-export">⬇ Export CSV</button>
+    <div class="card">
+      <div class="table-toolbar">
+        <input type="text" id="batch-search" placeholder="Search by filename…" />
+        <select id="batch-filter">
+          <option value="all">All verdicts</option>
+          <option value="pass">Passed only</option>
+          <option value="fail">Failed only</option>
+          <option value="needs_review">Needs review only</option>
+          <option value="error">Errors only</option>
+        </select>
+        <button class="secondary" id="batch-export">⬇ Export CSV</button>
+      </div>
+      <table class="batch-table">
+        <thead>
+          <tr><th>File name</th><th>Verdict</th></tr>
+        </thead>
+        <tbody id="batch-items"></tbody>
+      </table>
     </div>
-    <div id="batch-items"></div>
   </div>
 </main>
 
@@ -532,10 +642,12 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    document.getElementById("tab-single").style.display = btn.dataset.tab === "single" ? "block" : "none";
-    document.getElementById("tab-batch").style.display = btn.dataset.tab === "batch" ? "block" : "none";
+    const isSingle = btn.dataset.tab === "single";
+    document.getElementById("tab-single").style.display = isSingle ? "block" : "none";
+    document.getElementById("tab-batch").style.display = isSingle ? "none" : "block";
     document.getElementById("results").style.display = "none";
     document.getElementById("batch-rows").style.display = "none";
+    document.getElementById("breadcrumb-page").textContent = isSingle ? "Single Label Review" : "Batch Upload Triage";
   });
 });
 
@@ -546,28 +658,19 @@ document.getElementById("s-is-import").addEventListener("change", (e) => {
 });
 
 // ---------- Single verification ----------
-function badgeClass(status) { return status; }
-
 function renderFieldResults(fields) {
-  const container = document.getElementById("field-results");
-  container.innerHTML = "";
+  const tbody = document.getElementById("field-results");
+  tbody.innerHTML = "";
   fields.forEach(f => {
-    const row = document.createElement("div");
-    row.className = "field-row";
+    const row = document.createElement("tr");
+    row.className = f.status;
     row.innerHTML = `
-      <div class="field-accent ${badgeClass(f.status)}"></div>
-      <div class="field-body">
-        <div class="field-top">
-          <div class="field-name">${f.field.replace(/_/g," ")}</div>
-          <div class="badge ${badgeClass(f.status)}">${f.status.replace("_"," ")}</div>
-        </div>
-        <div class="field-values">
-          ${f.label_value ? `<b>On label:</b> ${escapeHtml(f.label_value)}` : "<i>Not found on label</i>"}
-          ${f.application_value ? ` &nbsp;·&nbsp; <b>Filed:</b> ${escapeHtml(f.application_value)}` : ""}
-        </div>
-        <div class="field-reason">${escapeHtml(f.reason)}</div>
-      </div>`;
-    container.appendChild(row);
+      <td>${f.field.replace(/_/g," ")}</td>
+      <td>${f.label_value ? escapeHtml(f.label_value) : '<span class="cell-muted">Not found on label</span>'}</td>
+      <td>${f.application_value ? escapeHtml(f.application_value) : '<span class="cell-muted">—</span>'}</td>
+      <td><span class="badge ${f.status}">${f.status.replace("_"," ")}</span></td>
+      <td class="cell-reason">${escapeHtml(f.reason)}</td>`;
+    tbody.appendChild(row);
   });
 }
 
@@ -577,11 +680,14 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function showStatusBanner(status) {
-  const banner = document.getElementById("status-banner");
-  banner.className = status;
-  const labelMap = { pass: "✅ PASS — Label matches application", fail: "❌ FAIL — Discrepancies found", needs_review: "⚠️ NEEDS REVIEW — One or more fields need a human judgment call" };
-  banner.textContent = labelMap[status] || status;
+function showStatusBanner(status, brandName) {
+  const pill = document.getElementById("review-status-pill");
+  const labelMap = { pass: "✅ Pass", fail: "❌ Fail", needs_review: "⚠️ Needs Review" };
+  pill.className = "status-pill " + status;
+  pill.textContent = labelMap[status] || status;
+  pill.style.display = "inline-flex";
+  document.getElementById("review-title").textContent = brandName ? `Application Review: ${brandName}` : "Application Review";
+  document.getElementById("review-meta").textContent = "Automated verification complete — review the field-by-field results below.";
 }
 
 document.getElementById("s-submit").addEventListener("click", async () => {
@@ -621,10 +727,11 @@ document.getElementById("s-submit").addEventListener("click", async () => {
     const resp = await fetch(`${API_BASE}/verify`, { method: "POST", body: formData });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || "Verification failed.");
-    showStatusBanner(data.overall_status);
+    showStatusBanner(data.overall_status, applicationData.brand_name);
     renderFieldResults(data.fields);
     resetDecisionPanel();
     document.getElementById("results").style.display = "block";
+    document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     errorBox.textContent = err.message;
     errorBox.style.display = "block";
@@ -651,7 +758,6 @@ document.querySelectorAll(".decision-btn").forEach(btn => {
       recordDecision("approve", "");
       return;
     }
-    // Reject and Flag require a short comment first.
     pendingDecision = decision;
     document.getElementById("decision-comment-wrap").style.display = "block";
     document.getElementById("decision-outcome").style.display = "none";
@@ -670,7 +776,7 @@ document.getElementById("decision-confirm").addEventListener("click", () => {
 
 function recordDecision(decision, comment) {
   const outcome = document.getElementById("decision-outcome");
-  const labelMap = { approve: "✅ Approved", reject: "❌ Rejected", flag: "🚩 Flagged for Manual Review" };
+  const labelMap = { approve: "✅ Approved", reject: "⛔ Rejected", flag: "🚩 Flagged for Manual Review" };
   const bgMap = { approve: "var(--pass-bg)", reject: "var(--fail-bg)", flag: "var(--review-bg)" };
   const colorMap = { approve: "var(--pass)", reject: "var(--fail)", flag: "var(--review)" };
   outcome.style.background = bgMap[decision];
@@ -684,7 +790,7 @@ function recordDecision(decision, comment) {
 function wireDropzone(zoneId, inputId, onFilesChanged) {
   const zone = document.getElementById(zoneId);
   const input = document.getElementById(inputId);
-  zone.addEventListener("click", () => input.click());
+  zone.addEventListener("click", (e) => { if (e.target.tagName !== "IMG") input.click(); });
   ["dragenter", "dragover"].forEach(evt =>
     zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.add("dragover"); })
   );
@@ -701,7 +807,12 @@ function wireDropzone(zoneId, inputId, onFilesChanged) {
 }
 
 wireDropzone("single-dropzone", "single-image", (files) => {
-  document.getElementById("single-file-name").textContent = files.length ? files[0].name : "";
+  const zone = document.getElementById("single-dropzone");
+  if (!files.length) { zone.classList.remove("has-preview"); return; }
+  const url = URL.createObjectURL(files[0]);
+  zone.classList.add("has-preview");
+  zone.innerHTML = `<img class="preview-img" src="${url}" alt="Label preview" />
+    <div class="dz-caption">${escapeHtml(files[0].name)} — click to choose a different photo</div>`;
 });
 
 // ---------- Batch verification ----------
@@ -769,7 +880,7 @@ document.getElementById("batch-submit").addEventListener("click", async () => {
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
-      buffer = lines.pop(); // last partial line stays in buffer
+      buffer = lines.pop();
       for (const line of lines) {
         if (!line.trim()) continue;
         const event = JSON.parse(line);
@@ -801,13 +912,14 @@ function renderBatchResults(data) {
   document.getElementById("batch-filter").value = "all";
   renderBatchItemList(data.items);
   document.getElementById("batch-rows").style.display = "block";
+  document.getElementById("batch-rows").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderBatchItemList(items) {
   const search = document.getElementById("batch-search").value.trim().toLowerCase();
   const filter = document.getElementById("batch-filter").value;
-  const container = document.getElementById("batch-items");
-  container.innerHTML = "";
+  const tbody = document.getElementById("batch-items");
+  tbody.innerHTML = "";
   items
     .filter(item => !search || item.label_filename.toLowerCase().includes(search))
     .filter(item => {
@@ -816,13 +928,14 @@ function renderBatchItemList(items) {
       return status === filter;
     })
     .forEach(item => {
-      const div = document.createElement("div");
-      div.className = "batch-item";
-      const status = item.error ? "fail" : item.result.overall_status;
+      const status = item.error ? "error" : item.result.overall_status;
       const statusLabel = item.error ? "ERROR" : status.replace("_", " ").toUpperCase();
-      div.innerHTML = `<span>${escapeHtml(item.label_filename)}</span><span class="badge ${status}">${statusLabel}</span>`;
-      div.addEventListener("click", () => showBatchDetail(item));
-      container.appendChild(div);
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><span class="swatch ${status}"></span>${escapeHtml(item.label_filename)}</td>
+        <td><span class="badge ${status}">${statusLabel}</span></td>`;
+      row.addEventListener("click", () => showBatchDetail(item));
+      tbody.appendChild(row);
     });
 }
 
@@ -861,21 +974,19 @@ function showBatchDetail(item) {
     modal.innerHTML = `<h3>${escapeHtml(item.label_filename)}</h3><p style="color:var(--fail)">${escapeHtml(item.error)}</p>`;
   } else {
     const rows = item.result.fields.map(f => `
-      <div class="field-row">
-        <div class="field-accent ${f.status}"></div>
-        <div class="field-body">
-          <div class="field-top">
-            <div class="field-name">${f.field.replace(/_/g," ")}</div>
-            <div class="badge ${f.status}">${f.status.replace("_"," ")}</div>
-          </div>
-          <div class="field-values">
-            ${f.label_value ? `<b>On label:</b> ${escapeHtml(f.label_value)}` : "<i>Not found</i>"}
-            ${f.application_value ? ` &nbsp;·&nbsp; <b>Filed:</b> ${escapeHtml(f.application_value)}` : ""}
-          </div>
-          <div class="field-reason">${escapeHtml(f.reason)}</div>
-        </div>
-      </div>`).join("");
-    modal.innerHTML = `<h3>${escapeHtml(item.label_filename)}</h3>${rows}<button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
+      <tr class="${f.status}">
+        <td>${f.field.replace(/_/g," ")}</td>
+        <td>${f.label_value ? escapeHtml(f.label_value) : '<span class="cell-muted">Not found</span>'}</td>
+        <td>${f.application_value ? escapeHtml(f.application_value) : '<span class="cell-muted">—</span>'}</td>
+        <td><span class="badge ${f.status}">${f.status.replace("_"," ")}</span></td>
+        <td class="cell-reason">${escapeHtml(f.reason)}</td>
+      </tr>`).join("");
+    modal.innerHTML = `<h3>${escapeHtml(item.label_filename)}</h3>
+      <table class="results-table">
+        <thead><tr><th>Field</th><th>On label</th><th>Filed</th><th>Status</th><th>Comment</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
   }
   document.getElementById("modal-backdrop").classList.add("open");
   document.getElementById("modal-close").addEventListener("click", () => {
