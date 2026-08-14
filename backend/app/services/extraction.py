@@ -38,71 +38,38 @@ was actually a hallucinated guess is worse than no tool at all.
 import base64
 import json
 import os
+import re
 import time
 
 from anthropic import Anthropic
 
 from app.models.schemas import ExtractedLabel
 
-# Chosen for latency, not just cost: this is a verbatim-transcription task,
-# not one requiring deep reasoning, so a smaller/faster model is the right
-# fit for Sarah's "5 seconds or nobody uses it" requirement. Override via
-# env var if a deployment prefers to trade latency for accuracy on
-# especially difficult (angled/glared/low-light) images.
 _MODEL = os.environ.get("ANTHROPIC_VISION_MODEL", "claude-haiku-4-5")
 
 UNREADABLE = "UNREADABLE"
 
-_SYSTEM_PROMPT = f"""You are assisting a federal (TTB) alcohol beverage compliance agent by \
-transcribing text from a photo of a label. Read the image carefully and transcribe each \
-field EXACTLY as printed — preserve original wording, punctuation, and capitalization. Do \
-not correct, normalize, paraphrase, or "clean up" anything you read.
+_SYSTEM_PROMPT = f"""You are assisting a federal (TTB) alcohol beverage compliance agent by transcribing text from a photo of a label. Read the image carefully and transcribe each field EXACTLY as printed — preserve original wording, punctuation, and capitalization. Do not correct, normalize, paraphrase, or "clean up" anything you read.
 
 Fields to extract:
 - brand_name
 - class_type (the class/type designation, e.g. "Kentucky Straight Bourbon Whiskey")
-- alcohol_content (as printed, e.g. "45% Alc./Vol. (90 Proof)", or a bare proof/degree \
-statement like "80 Proof" or "151°")
-- net_contents (as printed, e.g. "750 mL"). This is the TOTAL contents of the container. \
-Some labels also print a separate "Serving size" figure (e.g. "Serving size: 150 mL") for \
-nutritional/serving purposes — that is NOT net contents; never substitute it for the total \
-container volume.
-- bottler_info (name and address of the actual bottler/producer — the entity that made or \
-bottled the product — as printed. Some labels ALSO print a second, unrelated address for an \
-importer or distributor, often introduced by wording like "Imported by" — do not confuse \
-that with the bottler/producer's own address.)
+- alcohol_content (as printed, e.g. "45% Alc./Vol. (90 Proof)", or a bare proof/degree statement like "80 Proof" or "151 degrees")
+- net_contents (as printed, e.g. "750 mL"). This is the TOTAL contents of the container. Some labels also print a separate "Serving size" figure (e.g. "Serving size: 150 mL") for nutritional/serving purposes — that is NOT net contents; never substitute it for the total container volume.
+- bottler_info (name and address of the actual bottler/producer — the entity that made or bottled the product — as printed. Some labels ALSO print a second, unrelated address for an importer or distributor, often introduced by wording like "Imported by" — do not confuse that with the bottler/producer's own address.)
 - country_of_origin (only if present, e.g. for imports — extract just the country name)
-- government_warning_text (the FULL government health warning statement, verbatim, INCLUDING \
-the leading "GOVERNMENT WARNING:" heading itself — that heading is part of the required \
-statutory text, not a caption to omit, even though it's usually styled differently (bolded) \
-from the sentences that follow)
-- government_warning_is_all_caps_header (true only if the literal words "GOVERNMENT WARNING:" \
-appear in all capital letters as printed on THIS label; false if any letter in that phrase is \
-lowercase, e.g. "Government Warning:". This is standardized federal boilerplate you have seen \
-many times in training — resist relying on memory of its "usual" appearance; look at what is \
-actually printed in this specific image.)
-- government_warning_appears_bold (true if that header visually appears bold/heavier weight \
-than surrounding text on this label; false otherwise; null if you cannot tell)
+- government_warning_text (the FULL government health warning statement, verbatim, INCLUDING the leading "GOVERNMENT WARNING:" heading itself — that heading is part of the required statutory text, not a caption to omit, even though it's usually styled differently (bolded) from the sentences that follow)
+- government_warning_is_all_caps_header (true only if the literal words "GOVERNMENT WARNING:" appear in all capital letters as printed on THIS label; false if any letter in that phrase is lowercase, e.g. "Government Warning:". This is standardized federal boilerplate you have seen many times in training — resist relying on memory of its "usual" appearance; look at what is actually printed in this specific image.)
+- government_warning_appears_bold (true if that header visually appears bold/heavier weight than surrounding text on this label; false otherwise; null if you cannot tell)
 - extraction_confidence ("high", "medium", or "low" based on overall image clarity/angle/glare)
 - extraction_notes (brief note on anything ambiguous, illegible, or unusual — empty string if none)
 
 Critical rules to avoid guessing:
-1. Never invent a "typical" or "usually printed" value for a recognized brand. Read only \
-what is actually visible in THIS image. If you cannot confidently read a field's value \
-because of glare, blur, poor angle, or small text — even for a brand whose typical ABV or \
-proof you might recognize from training — set that field's value to the literal string \
-"{UNREADABLE}" rather than guessing. This applies especially to alcohol_content: do not \
-recall a brand's usual proof/ABV instead of reading the bottle.
-2. If a field is genuinely absent from the label (e.g. no country-of-origin statement on a \
-domestic product), use an empty string "", not "{UNREADABLE}" — these mean different things: \
-"{UNREADABLE}" means present but illegible (a re-photograph might fix it), "" means not on the \
-label at all (no re-photograph will help).
-3. Never guess at illegible fine print (especially a bottler street address) by \
-pattern-matching to a plausible-sounding but different name/address/spelling — transcribe \
-character-by-character what is actually visible, or mark it "{UNREADABLE}".
+1. Never invent a "typical" or "usually printed" value for a recognized brand. Read only what is actually visible in THIS image. If you cannot confidently read a field's value because of glare, blur, poor angle, or small text — even for a brand whose typical ABV or proof you might recognize from training — set that field's value to the literal string "{UNREADABLE}" rather than guessing. This applies especially to alcohol_content: do not recall a brand's usual proof/ABV instead of reading the bottle.
+2. If a field is genuinely absent from the label (e.g. no country-of-origin statement on a domestic product), use an empty string "", not "{UNREADABLE}" — these mean different things: "{UNREADABLE}" means present but illegible (a re-photograph might fix it), "" means not on the label at all (no re-photograph will help).
+3. Never guess at illegible fine print (especially a bottler street address) by pattern-matching to a plausible-sounding but different name/address/spelling — transcribe character-by-character what is actually visible, or mark it "{UNREADABLE}".
 
-Respond with ONLY a single JSON object with exactly these keys, no markdown fences, no \
-commentary."""
+Respond with ONLY a single JSON object with exactly these keys, no markdown fences, no commentary."""
 
 
 def _guess_media_type(filename: str) -> str:
@@ -127,14 +94,8 @@ def extract_label_fields(image_bytes: bytes, filename: str = "label.jpg") -> tup
         raise RuntimeError(
             "ANTHROPIC_API_KEY is not set. Add it to your .env file (see README) before running verification."
         )
+    api_key = re.sub(r"\s+", "", api_key)
 
-    # Explicit timeout + a single retry: the Anthropic SDK's default
-    # "Connection error." message swallows the real underlying cause
-    # (DNS failure, TLS failure, read timeout, etc.), which makes
-    # diagnosing serverless networking issues (e.g. on Vercel) painful.
-    # We keep max_retries low here since our own caller (the /verify and
-    # /extract routes) already has to stay under the platform's function
-    # timeout.
     client = Anthropic(api_key=api_key, timeout=30.0, max_retries=1)
     media_type = _guess_media_type(filename)
     b64_image = base64.standard_b64encode(image_bytes).decode("utf-8")
@@ -161,17 +122,12 @@ def extract_label_fields(image_bytes: bytes, filename: str = "label.jpg") -> tup
                 }
             ],
         )
-    except Exception as exc:  # network/auth/rate-limit errors all land here
-        # exc.__cause__ holds the real httpx/httpcore exception (e.g.
-        # "getaddrinfo failed", "SSL: CERTIFICATE_VERIFY_FAILED", a real
-        # timeout, etc.) that the Anthropic SDK's own message ("Connection
-        # error.") hides. Surface both so the actual cause is visible in
-        # the error the frontend displays, instead of just the generic
-        # wrapper text.
+    except Exception as exc:
         cause = exc.__cause__
         detail = f"{type(exc).__name__}: {exc}"
         if cause is not None:
             detail += f" | caused by {type(cause).__name__}: {cause}"
+        detail = re.sub(r"sk-ant-[A-Za-z0-9_\-\s]{0,200}", "[REDACTED_API_KEY]", detail)
         raise RuntimeError(f"Vision extraction request failed: {detail}") from exc
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
