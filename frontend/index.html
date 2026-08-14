@@ -425,6 +425,68 @@
   .batch-table .swatch.fail { background: var(--fail); }
   .batch-table .swatch.needs_review { background: var(--review); }
   .batch-table .swatch.error { background: var(--neutral); }
+
+  /* ---------- Application Queue ---------- */
+  .queue-filter-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .queue-filter-chip {
+    display: flex; align-items: center; gap: 7px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .queue-filter-chip .chip-count {
+    background: var(--neutral-bg);
+    color: var(--ink-soft);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .queue-filter-chip.active { border-color: var(--brand); color: var(--ink); background: var(--brand-tint); }
+  .queue-filter-chip.active .chip-count { background: var(--brand); color: white; }
+
+  .app-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .app-status-badge.needs_review, .app-status-badge.flagged { background: var(--review-bg); color: var(--review); }
+  .app-status-badge.pending { background: var(--neutral-bg); color: var(--neutral); }
+  .app-status-badge.approved { background: var(--pass-bg); color: var(--pass); }
+
+  /* ---------- Field comparison cards (Expected vs Detected on label) ----------
+     Replaces the old row-per-field results table with a card per field so
+     the Expected/Detected pairing reads clearly at a glance -- used both by
+     the inline Single Label result and by the Application Queue detail. */
+  .field-card {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .field-card:last-child { margin-bottom: 0; }
+  .field-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .field-card-head .field-name { font-size: 14.5px; font-weight: 700; }
+  .fc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  @media (max-width: 560px) { .fc-grid { grid-template-columns: 1fr; gap: 10px 0; } }
+  .fc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 4px; }
+  .fc-value { font-size: 14px; color: var(--ink); word-break: break-word; }
+  .fc-value.muted { color: var(--ink-soft); font-style: italic; }
+  .fc-reason { font-size: 12.5px; color: var(--ink-soft); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+
+  .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .detail-note-wrap { margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -446,6 +508,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="single">Single Label</button>
     <button class="tab-btn" data-tab="batch">Batch Upload</button>
+    <button class="tab-btn" data-tab="queue">Application Queue</button>
   </div>
 
   <!-- SINGLE LABEL TAB -->
@@ -535,18 +598,7 @@
     <div class="card">
       <h2 class="section-title">Automated regulatory verification</h2>
       <div class="section-sub">Comparing visual extraction from the uploaded label image against the filed application fields.</div>
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th>Field</th>
-            <th>Value on label</th>
-            <th>Value in application</th>
-            <th>Status</th>
-            <th>Regulatory / audit comment</th>
-          </tr>
-        </thead>
-        <tbody id="field-results"></tbody>
-      </table>
+      <div id="field-results"></div>
     </div>
     <div class="card">
       <h2 class="section-title">Reviewer decision &amp; audit log</h2>
@@ -563,8 +615,7 @@
       </div>
       <div id="decision-outcome" style="display:none; margin-top:16px; padding:13px 16px; border-radius:7px; font-size:14px; font-weight:600;"></div>
       <div class="decision-log">
-        Prototype note: this decision is recorded for this session only (no database in this build) — a production
-        version would persist it against the application record and route it back into the queue.
+        This decision is saved to the Application Queue against this submission's record — open the Application Queue tab any time to review or change it.
       </div>
     </div>
   </div>
@@ -634,6 +685,34 @@
       </table>
     </div>
   </div>
+
+  <!-- QUEUE TAB -->
+  <div id="tab-queue" style="display:none">
+    <div class="page-head">
+      <div>
+        <h1>Application Queue</h1>
+        <div class="page-meta" id="queue-meta">Past label verifications submitted through Single Label Review.</div>
+      </div>
+    </div>
+
+    <div class="queue-filter-row" id="queue-filters">
+      <button class="queue-filter-chip active" data-filter="all">All <span class="chip-count" id="qc-all">0</span></button>
+      <button class="queue-filter-chip" data-filter="flagged">Flagged <span class="chip-count" id="qc-flagged">0</span></button>
+      <button class="queue-filter-chip" data-filter="needs_review">Needs Review <span class="chip-count" id="qc-needs_review">0</span></button>
+      <button class="queue-filter-chip" data-filter="pending">Pending <span class="chip-count" id="qc-pending">0</span></button>
+      <button class="queue-filter-chip" data-filter="approved">Approved <span class="chip-count" id="qc-approved">0</span></button>
+    </div>
+
+    <div class="card">
+      <div id="queue-empty" class="hint">Loading…</div>
+      <table class="batch-table" id="queue-table" style="display:none">
+        <thead>
+          <tr><th>#</th><th>Brand</th><th>Details</th><th>Submitted</th><th>Status</th></tr>
+        </thead>
+        <tbody id="queue-items"></tbody>
+      </table>
+    </div>
+  </div>
 </main>
 
 <div class="modal-backdrop" id="modal-backdrop">
@@ -644,16 +723,22 @@
 const API_BASE = "/api";
 
 // ---------- Tabs ----------
+const TAB_META = {
+  single: { section: "tab-single", breadcrumb: "Single Label Review" },
+  batch: { section: "tab-batch", breadcrumb: "Batch Upload Triage" },
+  queue: { section: "tab-queue", breadcrumb: "Application Queue" },
+};
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    const isSingle = btn.dataset.tab === "single";
-    document.getElementById("tab-single").style.display = isSingle ? "block" : "none";
-    document.getElementById("tab-batch").style.display = isSingle ? "none" : "block";
+    const tab = btn.dataset.tab;
+    Object.values(TAB_META).forEach(meta => { document.getElementById(meta.section).style.display = "none"; });
+    document.getElementById(TAB_META[tab].section).style.display = "block";
     document.getElementById("results").style.display = "none";
     document.getElementById("batch-rows").style.display = "none";
-    document.getElementById("breadcrumb-page").textContent = isSingle ? "Single Label Review" : "Batch Upload Triage";
+    document.getElementById("breadcrumb-page").textContent = TAB_META[tab].breadcrumb;
+    if (tab === "queue") loadQueue();
   });
 });
 
@@ -664,19 +749,52 @@ document.getElementById("s-is-import").addEventListener("change", (e) => {
 });
 
 // ---------- Single verification ----------
-function renderFieldResults(fields) {
-  const tbody = document.getElementById("field-results");
-  tbody.innerHTML = "";
+
+// Maps a field's presentation "badge" (see backend/app/services/badges.py)
+// onto an existing status-color class plus reviewer-facing label. Kept as
+// a lookup table here rather than hardcoding classes/labels inline so the
+// two callers (inline single-verify result, Application Queue detail) stay
+// in sync automatically.
+const BADGE_META = {
+  match: { cls: "pass", label: "Match" },
+  minor_variance: { cls: "needs_review", label: "Minor Variance" },
+  on_label: { cls: "not_applicable", label: "On Label" },
+  needs_review: { cls: "needs_review", label: "Needs Review" },
+  unreadable: { cls: "fail", label: "Unreadable" },
+  mismatch: { cls: "fail", label: "Mismatch" },
+};
+
+function titleCaseField(name) {
+  return name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Renders one field-card per FieldResult into `container` as an
+// Expected (filed) vs Detected (on label) pair with a status badge —
+// used by both the inline Single Label result and the Application Queue
+// detail modal, so the two views stay visually consistent.
+function renderFieldCards(container, fields) {
+  container.innerHTML = "";
   fields.forEach(f => {
-    const row = document.createElement("tr");
-    row.className = f.status;
-    row.innerHTML = `
-      <td>${f.field.replace(/_/g," ")}</td>
-      <td>${f.label_value ? escapeHtml(f.label_value) : '<span class="cell-muted">Not found on label</span>'}</td>
-      <td>${f.application_value ? escapeHtml(f.application_value) : '<span class="cell-muted">—</span>'}</td>
-      <td><span class="badge ${f.status}">${f.status.replace("_"," ")}</span></td>
-      <td class="cell-reason">${escapeHtml(f.reason)}</td>`;
-    tbody.appendChild(row);
+    const meta = BADGE_META[f.badge] || { cls: f.status, label: f.status.replace(/_/g, " ") };
+    const card = document.createElement("div");
+    card.className = "field-card";
+    card.innerHTML = `
+      <div class="field-card-head">
+        <span class="field-name">${titleCaseField(f.field)}</span>
+        <span class="badge ${meta.cls}">${meta.label}</span>
+      </div>
+      <div class="fc-grid">
+        <div>
+          <div class="fc-label">Expected (filed)</div>
+          <div class="fc-value ${f.application_value ? "" : "muted"}">${f.application_value ? escapeHtml(f.application_value) : "(not provided)"}</div>
+        </div>
+        <div>
+          <div class="fc-label">Detected on label</div>
+          <div class="fc-value ${f.label_value ? "" : "muted"}">${f.label_value ? escapeHtml(f.label_value) : "(not found)"}</div>
+        </div>
+      </div>
+      <div class="fc-reason">${escapeHtml(f.reason)}</div>`;
+    container.appendChild(card);
   });
 }
 
@@ -786,11 +904,16 @@ document.getElementById("s-submit").addEventListener("click", async () => {
   document.getElementById("results").style.display = "none";
 
   try {
-    const resp = await fetch(`${API_BASE}/verify`, { method: "POST", body: formData });
+    // /applications/verify runs the same extraction + comparison as
+    // /verify, but also persists the result to the Application Queue
+    // (see backend/app/routers/applications.py) — data.id is the queue
+    // record's id, used below to wire the Approve/Flag/Reject buttons.
+    const resp = await fetch(`${API_BASE}/applications/verify`, { method: "POST", body: formData });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || "Verification failed.");
+    currentApplicationId = data.id;
     showStatusBanner(data.overall_status, applicationData.brand_name);
-    renderFieldResults(data.fields);
+    renderFieldCards(document.getElementById("field-results"), data.fields);
     resetDecisionPanel();
     document.getElementById("results").style.display = "block";
     document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -803,8 +926,16 @@ document.getElementById("s-submit").addEventListener("click", async () => {
   }
 });
 
-// ---------- Agent decision (Approve / Reject / Flag) ----------
+// ---------- Reviewer decision (Approve / Reject / Flag) ----------
+// Persists to the Application Queue via PATCH /api/applications/{id} —
+// currentApplicationId is set when /applications/verify returns (see the
+// s-submit handler above). decision -> ApplicationStatus value mapping:
+// "reject" maps to the "pending" status (read as "pending resubmission
+// from the applicant"), matching backend/app/models/schemas.py's
+// ApplicationStatus doc comment.
 let pendingDecision = null;
+let currentApplicationId = null;
+const DECISION_STATUS = { approve: "approved", reject: "pending", flag: "flagged" };
 
 function resetDecisionPanel() {
   pendingDecision = null;
@@ -836,16 +967,41 @@ document.getElementById("decision-confirm").addEventListener("click", () => {
   recordDecision(pendingDecision, comment);
 });
 
-function recordDecision(decision, comment) {
+async function recordDecision(decision, comment) {
   const outcome = document.getElementById("decision-outcome");
   const labelMap = { approve: "✅ Approved", reject: "⛔ Rejected", flag: "🚩 Flagged for Manual Review" };
   const bgMap = { approve: "var(--pass-bg)", reject: "var(--fail-bg)", flag: "var(--review-bg)" };
   const colorMap = { approve: "var(--pass)", reject: "var(--fail)", flag: "var(--review)" };
-  outcome.style.background = bgMap[decision];
-  outcome.style.color = colorMap[decision];
-  outcome.textContent = `${labelMap[decision]}${comment ? " — " + comment : ""}`;
-  outcome.style.display = "block";
-  document.getElementById("decision-comment-wrap").style.display = "none";
+
+  if (!currentApplicationId) {
+    outcome.style.background = "var(--fail-bg)";
+    outcome.style.color = "var(--fail)";
+    outcome.textContent = "Could not save — no application record for this submission.";
+    outcome.style.display = "block";
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${API_BASE}/applications/${currentApplicationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: DECISION_STATUS[decision], note: comment || null }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || "Could not save this decision.");
+    }
+    outcome.style.background = bgMap[decision];
+    outcome.style.color = colorMap[decision];
+    outcome.textContent = `${labelMap[decision]}${comment ? " — " + comment : ""}`;
+    outcome.style.display = "block";
+    document.getElementById("decision-comment-wrap").style.display = "none";
+  } catch (err) {
+    outcome.style.background = "var(--fail-bg)";
+    outcome.style.color = "var(--fail)";
+    outcome.textContent = err.message;
+    outcome.style.display = "block";
+  }
 }
 
 // ---------- Drag & drop (single + batch dropzones) ----------
@@ -1066,8 +1222,153 @@ function showBatchDetail(item) {
 }
 
 document.getElementById("modal-backdrop").addEventListener("click", (e) => {
-  if (e.target.id === "modal-backdrop") e.target.classList.remove("open");
+  if (e.target.id === "modal-backdrop") {
+    e.target.classList.remove("open");
+    if (document.querySelector(".tab-btn.active").dataset.tab === "queue") loadQueue();
+  }
 });
+
+// ---------- Application Queue ----------
+let queueItems = [];
+let queueCounts = { all: 0, flagged: 0, needs_review: 0, pending: 0, approved: 0 };
+let queueFilter = "all";
+
+async function loadQueue() {
+  const meta = document.getElementById("queue-meta");
+  try {
+    const resp = await fetch(`${API_BASE}/applications`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "Could not load the application queue.");
+    queueItems = data.items;
+    queueCounts = data.counts;
+    renderQueueChips();
+    renderQueueTable();
+    const needAttention = (queueCounts.needs_review || 0) + (queueCounts.flagged || 0);
+    meta.textContent = `${queueCounts.all} application${queueCounts.all === 1 ? "" : "s"} · ${needAttention} need${needAttention === 1 ? "s" : ""} attention`;
+  } catch (err) {
+    meta.textContent = err.message;
+  }
+}
+
+function renderQueueChips() {
+  ["all", "flagged", "needs_review", "pending", "approved"].forEach(key => {
+    document.getElementById(`qc-${key}`).textContent = queueCounts[key] || 0;
+  });
+}
+
+document.querySelectorAll(".queue-filter-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".queue-filter-chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    queueFilter = chip.dataset.filter;
+    renderQueueTable();
+  });
+});
+
+function renderQueueTable() {
+  const filtered = queueFilter === "all" ? queueItems : queueItems.filter(i => i.status === queueFilter);
+  const table = document.getElementById("queue-table");
+  const empty = document.getElementById("queue-empty");
+  const tbody = document.getElementById("queue-items");
+  tbody.innerHTML = "";
+  if (!filtered.length) {
+    table.style.display = "none";
+    empty.style.display = "block";
+    empty.textContent = queueItems.length
+      ? "No applications match this filter."
+      : "No applications yet — submissions from Single Label Review will show up here.";
+    return;
+  }
+  empty.style.display = "none";
+  table.style.display = "table";
+  filtered.forEach((item, idx) => {
+    const row = document.createElement("tr");
+    const submitted = new Date(item.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const statusLabel = titleCaseField(item.status);
+    row.innerHTML = `
+      <td>${idx + 1}</td>
+      <td><b>${escapeHtml(item.brand_name || "—")}</b><br><span class="hint" style="margin:0">${escapeHtml(item.class_type || "")}</span></td>
+      <td>${escapeHtml(item.details)}<br><span class="hint" style="margin:0">${escapeHtml(item.net_contents || "")}</span></td>
+      <td>${submitted}</td>
+      <td><span class="app-status-badge ${item.status}">${statusLabel}</span></td>`;
+    row.addEventListener("click", () => openApplicationDetail(item.id));
+    tbody.appendChild(row);
+  });
+}
+
+async function openApplicationDetail(id) {
+  const modal = document.getElementById("modal-content");
+  modal.innerHTML = `<div class="hint">Loading…</div>`;
+  document.getElementById("modal-backdrop").classList.add("open");
+  try {
+    const resp = await fetch(`${API_BASE}/applications/${id}`);
+    const record = await resp.json();
+    if (!resp.ok) throw new Error(record.detail || "Could not load this application.");
+    renderApplicationDetail(record);
+  } catch (err) {
+    modal.innerHTML = `<p style="color:var(--fail)">${escapeHtml(err.message)}</p><button class="secondary" id="modal-close">Close</button>`;
+    document.getElementById("modal-close").addEventListener("click", () => document.getElementById("modal-backdrop").classList.remove("open"));
+  }
+}
+
+function renderApplicationDetail(record) {
+  const modal = document.getElementById("modal-content");
+  const submitted = new Date(record.created_at).toLocaleString();
+  modal.innerHTML = `
+    <h3>${escapeHtml(record.application.brand_name)}</h3>
+    <div class="hint" style="margin-top:-8px;">Submitted ${submitted} · Label file: ${escapeHtml(record.label_filename || "—")}</div>
+    <div id="modal-field-cards" style="margin-top:16px;"></div>
+    <div class="detail-actions">
+      <button class="decision-btn flag" data-modal-decision="flagged">🚩 Flag for Review</button>
+      <button class="decision-btn reject" data-modal-decision="pending">⛔ Reject</button>
+      <button class="decision-btn approve" data-modal-decision="approved">✅ Approve</button>
+    </div>
+    <div class="detail-note-wrap">
+      <label style="margin-top:0">Note <span class="label-hint">(optional for Approve, required for Flag/Reject)</span></label>
+      <input type="text" id="modal-note" placeholder="Add a note (optional)" value="${escapeHtml(record.note || "")}" />
+    </div>
+    <div id="modal-outcome" style="display:none; margin-top:14px; padding:12px 15px; border-radius:7px; font-size:13.5px; font-weight:600;"></div>
+    <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
+
+  renderFieldCards(document.getElementById("modal-field-cards"), record.fields);
+
+  document.getElementById("modal-close").addEventListener("click", () => {
+    document.getElementById("modal-backdrop").classList.remove("open");
+    loadQueue();
+  });
+
+  modal.querySelectorAll("[data-modal-decision]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const status = btn.dataset.modalDecision;
+      const note = document.getElementById("modal-note").value.trim();
+      if (status !== "approved" && !note) {
+        document.getElementById("modal-note").style.borderColor = "var(--fail)";
+        return;
+      }
+      const outcome = document.getElementById("modal-outcome");
+      try {
+        const resp = await fetch(`${API_BASE}/applications/${record.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status, note: note || null }),
+        });
+        const updated = await resp.json();
+        if (!resp.ok) throw new Error(updated.detail || "Could not save this decision.");
+        const labelMap = { approved: "✅ Approved", pending: "⛔ Rejected — pending resubmission", flagged: "🚩 Flagged for Manual Review" };
+        outcome.style.background = status === "approved" ? "var(--pass-bg)" : status === "pending" ? "var(--fail-bg)" : "var(--review-bg)";
+        outcome.style.color = status === "approved" ? "var(--pass)" : status === "pending" ? "var(--fail)" : "var(--review)";
+        outcome.textContent = labelMap[status];
+        outcome.style.display = "block";
+        record.status = updated.status;
+      } catch (err) {
+        outcome.style.background = "var(--fail-bg)";
+        outcome.style.color = "var(--fail)";
+        outcome.textContent = err.message;
+        outcome.style.display = "block";
+      }
+    });
+  });
+}
 </script>
 </body>
 </html>
