@@ -1,0 +1,38 @@
+{
+  "clean_match.jpg": {
+    "beverage_type": "distilled_spirits",
+    "brand_name": "Old Tom Distillery",
+    "class_type": "Kentucky Straight Bourbon Whiskey",
+    "alcohol_content": "45% Alc./Vol.",
+    "net_contents": "750 mL",
+    "bottler_info": "Old Tom Distillery, Bardstown, KY",
+    "is_import": false
+  },
+  "casing_mismatch_ok.jpg": {
+    "beverage_type": "distilled_spirits",
+    "brand_name": "Stone's Throw",
+    "class_type": "American Craft Vodka",
+    "alcohol_content": "40% Alc./Vol.",
+    "net_contents": "750 mL",
+    "bottler_info": "Stone's Throw Distilling Co.",
+    "is_import": false
+  },
+  "warning_titlecase_fail.jpg": {
+    "beverage_type": "beer",
+    "brand_name": "Harbor Light Brewing",
+    "class_type": "India Pale Ale",
+    "alcohol_content": "6.5% Alc./Vol.",
+    "net_contents": "355 mL",
+    "bottler_info": "Harbor Light Brewing Co., Portland, ME",
+    "is_import": false
+  },
+  "abv_mismatch_fail.jpg": {
+    "beverage_type": "wine",
+    "brand_name": "Silver Ridge Vineyards",
+    "class_type": "Cabernet Sauvignon",
+    "alcohol_content": "13.0% Alc./Vol.",
+    "net_contents": "750 mL",
+    "bottler_info": "Silver Ridge Vineyards, Napa, CA",
+    "is_import": false
+  }
+}

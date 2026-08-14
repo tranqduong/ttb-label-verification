@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TTB Label Verification</title>
+<style>
+  :root {
+    /* Semantic status colors — deliberately muted/desaturated so the UI
+       reads as a calm, trustworthy government tool rather than a flashy
+       consumer app, while staying clearly distinguishable and accessible
+       at normal text sizes (not relying on color alone: every status also
+       carries a text label). */
+    --pass: #1a7f4a;
+    --pass-bg: #eaf7ee;
+    --pass-border: #b7e4c4;
+    --fail: #c62b3a;
+    --fail-bg: #fdecee;
+    --fail-border: #f3c1c7;
+    --review: #966a10;
+    --review-bg: #fdf5e2;
+    --review-border: #ecdca4;
+    --neutral: #5c6570;
+    --neutral-bg: #f0f2f4;
+    --neutral-border: #dde1e6;
+
+    /* Neutral / brand scale */
+    --ink: #16211f;
+    --ink-soft: #4a5551;
+    --line: #dfe4e2;
+    --line-soft: #ecefee;
+    --surface: #ffffff;
+    --canvas: #f4f6f5;
+    --brand: #0e3b34;
+    --brand-hover: #0a2e29;
+    --brand-tint: #e7f0ee;
+
+    --radius: 10px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(16, 30, 27, 0.04), 0 4px 14px rgba(16, 30, 27, 0.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--canvas);
+    color: var(--ink);
+    margin: 0;
+    padding: 0 0 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    background: var(--brand);
+    color: white;
+    padding: 22px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header .mark {
+    width: 40px; height: 40px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  header h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  header p { margin: 3px 0 0; font-size: 13.5px; color: rgba(255,255,255,0.72); }
+
+  main {
+    max-width: 880px;
+    margin: 32px auto 0;
+    padding: 0 24px;
+  }
+
+  h2.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    margin: 0 0 14px;
+  }
+
+  .tabs {
+    display: inline-flex;
+    padding: 4px;
+    background: var(--line-soft);
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  .tab-btn {
+    padding: 9px 22px;
+    font-size: 14.5px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .tab-btn.active {
+    background: var(--surface);
+    color: var(--brand);
+    box-shadow: var(--shadow);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 26px 28px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+
+  label {
+    display: block;
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--ink);
+    margin: 16px 0 6px;
+  }
+  label:first-of-type { margin-top: 0; }
+  .label-hint { font-weight: 400; color: var(--ink-soft); }
+
+  input[type=text], select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14.5px;
+    font-family: inherit;
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    transition: border-color 0.12s ease;
+  }
+  input[type=text]:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--brand);
+  }
+  input[type=file] {
+    margin-top: 8px;
+    font-size: 13.5px;
+  }
+  .row { display: flex; gap: 18px; }
+  .row > div { flex: 1; }
+  .hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.45; }
+
+  button.primary {
+    margin-top: 22px;
+    background: var(--brand);
+    color: white;
+    border: none;
+    padding: 13px 26px;
+    font-size: 15px;
+    font-weight: 650;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  button.primary:hover:not(:disabled) { background: var(--brand-hover); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  button.secondary {
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    color: var(--ink);
+    padding: 9px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  button.secondary:hover { border-color: var(--brand); color: var(--brand); }
+
+  #status-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 20px;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 650;
+    margin-bottom: 16px;
+    border: 1.5px solid transparent;
+  }
+  #status-banner.pass { background: var(--pass-bg); color: var(--pass); border-color: var(--pass-border); display: flex; }
+  #status-banner.fail { background: var(--fail-bg); color: var(--fail); border-color: var(--fail-border); display: flex; }
+  #status-banner.needs_review { background: var(--review-bg); color: var(--review); border-color: var(--review-border); display: flex; }
+
+  .field-row {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-accent {
+    width: 4px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: var(--neutral-border);
+  }
+  .field-accent.pass { background: var(--pass); }
+  .field-accent.fail { background: var(--fail); }
+  .field-accent.needs_review, .field-accent.warning { background: var(--review); }
+
+  .field-body { flex: 1; min-width: 0; }
+  .field-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .field-name { font-weight: 650; font-size: 14.5px; text-transform: capitalize; }
+
+  .badge {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  .badge.pass { background: var(--pass-bg); color: var(--pass); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail); }
+  .badge.warning, .badge.needs_review { background: var(--review-bg); color: var(--review); }
+  .badge.not_applicable { background: var(--neutral-bg); color: var(--neutral); }
+
+  .field-values { font-size: 13.5px; color: var(--ink-soft); margin: 4px 0 3px; line-height: 1.5; }
+  .field-values b { color: var(--ink); font-weight: 600; }
+  .field-reason { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+
+  #loading {
+    display: none;
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin: 14px 0 0;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--line);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #error-box {
+    display: none;
+    background: var(--fail-bg);
+    color: var(--fail);
+    border: 1.5px solid var(--fail-border);
+    padding: 13px 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 18px;
+    font-size: 13.5px;
+  }
+
+  .batch-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 13px 16px;
+    border: 1.5px solid var(--line);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .batch-item:hover { background: var(--brand-tint); border-color: var(--brand); }
+  .batch-item span:first-child { font-size: 13.5px; font-weight: 550; }
+
+  .batch-summary {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    flex-wrap: wrap;
+  }
+  .batch-summary b { font-size: 24px; display: block; color: var(--ink); font-weight: 700; }
+
+  #batch-rows { display: none; margin-top: 18px; }
+
+  .decision-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .decision-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    font-weight: 650;
+    font-size: 14px;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: filter 0.12s ease;
+  }
+  .decision-btn:hover { filter: brightness(0.97); }
+  .decision-btn.approve { background: var(--pass-bg); color: var(--pass); border-color: var(--pass-border); }
+  .decision-btn.reject { background: var(--fail-bg); color: var(--fail); border-color: var(--fail-border); }
+  .decision-btn.flag { background: var(--review-bg); color: var(--review); border-color: var(--review-border); }
+
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(15, 25, 22, 0.45);
+    align-items: center; justify-content: center;
+    z-index: 10;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 26px 28px;
+    max-width: 700px;
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 90%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  }
+  .modal h3 { margin-top: 0; }
+
+  .dropzone {
+    border: 1.5px dashed var(--line);
+    border-radius: var(--radius);
+    background: var(--canvas);
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--brand); background: var(--brand-tint); }
+  .dropzone .dz-icon { font-size: 22px; margin-bottom: 6px; }
+  .dropzone .dz-primary { font-size: 14.5px; font-weight: 650; color: var(--ink); }
+  .dropzone .dz-secondary { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+  .dropzone .dz-filelist { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; text-align: left; max-height: 90px; overflow-y: auto; }
+  .dropzone input[type=file] { display: none; }
+
+  .progress-track {
+    height: 8px;
+    background: var(--line-soft);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--brand);
+    border-radius: 20px;
+    width: 0%;
+    transition: width 0.2s ease;
+  }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
+
+  .table-toolbar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .table-toolbar input[type=text] { flex: 1; min-width: 160px; }
+  .table-toolbar select { width: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">🏷</div>
+  <div>
+    <h1>TTB Label Verification</h1>
+    <p>Upload a label photo and the filed application data — get a field-by-field result in seconds.</p>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="single">Single Label</button>
+    <button class="tab-btn" data-tab="batch">Batch Upload</button>
+  </div>
+
+  <!-- SINGLE LABEL TAB -->
+  <div id="tab-single" class="card">
+    <h2 class="section-title">Label &amp; application details</h2>
+    <div id="error-box"></div>
+
+    <label>Label photo</label>
+    <div class="dropzone" id="single-dropzone">
+      <div class="dz-icon">📤</div>
+      <div class="dz-primary">Drag &amp; drop a label photo here</div>
+      <div class="dz-secondary">or click to browse — JPG or PNG</div>
+      <div class="dz-filelist" id="single-file-name"></div>
+      <input type="file" id="single-image" accept="image/*" />
+    </div>
+    <div class="hint">A clear, well-lit, straight-on photo works best.</div>
+
+    <div class="row">
+      <div>
+        <label>Beverage type</label>
+        <select id="s-beverage-type">
+          <option value="distilled_spirits">Distilled Spirits</option>
+          <option value="wine">Wine</option>
+          <option value="beer">Beer</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label>Is this an import?</label>
+        <select id="s-is-import">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Brand name <span class="label-hint">(as filed)</span></label>
+    <input type="text" id="s-brand-name" placeholder="OLD TOM DISTILLERY" />
+
+    <label>Class/type designation <span class="label-hint">(as filed)</span></label>
+    <input type="text" id="s-class-type" placeholder="Kentucky Straight Bourbon Whiskey" />
+
+    <div class="row">
+      <div>
+        <label>Alcohol content <span class="label-hint">(optional)</span></label>
+        <input type="text" id="s-abv" placeholder="45% Alc./Vol. (90 Proof)" />
+      </div>
+      <div>
+        <label>Net contents <span class="label-hint">(as filed)</span></label>
+        <input type="text" id="s-net-contents" placeholder="750 mL" />
+      </div>
+    </div>
+
+    <label>Bottler / producer name &amp; address <span class="label-hint">(optional)</span></label>
+    <input type="text" id="s-bottler" placeholder="Old Tom Distillery, Bardstown, KY" />
+
+    <label id="s-country-label" style="display:none">Country of origin <span class="label-hint">(as filed)</span></label>
+    <input type="text" id="s-country" style="display:none" placeholder="Scotland" />
+
+    <button class="primary" id="s-submit">Verify Label</button>
+    <div id="loading"><span class="spinner"></span> Analyzing label — this usually takes a few seconds.</div>
+  </div>
+
+  <div id="results" style="display:none">
+    <div id="status-banner"></div>
+    <div class="card">
+      <h2 class="section-title">Field-by-field results</h2>
+      <div id="field-results"></div>
+    </div>
+    <div class="card">
+      <h2 class="section-title">Agent decision</h2>
+      <div class="hint" style="margin-bottom:14px">
+        This tool suggests a verdict — the agent makes the call. Reject and Flag require a short comment.
+      </div>
+      <div class="decision-row">
+        <button class="decision-btn approve" data-decision="approve">✅ Approve</button>
+        <button class="decision-btn reject" data-decision="reject">❌ Reject</button>
+        <button class="decision-btn flag" data-decision="flag">🚩 Flag for Manual Review</button>
+      </div>
+      <div id="decision-comment-wrap" style="display:none; margin-top:16px;">
+        <label>Comment <span class="label-hint">(required)</span></label>
+        <input type="text" id="decision-comment" placeholder="Briefly explain why..." />
+        <button class="secondary" id="decision-confirm" style="margin-top:12px">Confirm</button>
+      </div>
+      <div id="decision-outcome" style="display:none; margin-top:16px; padding:13px 16px; border-radius:7px; font-size:14px; font-weight:600;"></div>
+      <div class="hint" style="margin-top:14px">
+        Prototype note: this decision is recorded for this session only (no database in this build) — a production
+        version would persist it against the application record and route it back into the queue.
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH TAB -->
+  <div id="tab-batch" class="card" style="display:none">
+    <h2 class="section-title">Batch upload</h2>
+    <div id="batch-error-box" class="hint" style="color:var(--fail); margin-bottom:8px;"></div>
+    <label>Label photos <span class="label-hint">(select multiple)</span></label>
+    <div class="dropzone" id="batch-dropzone">
+      <div class="dz-icon">📤</div>
+      <div class="dz-primary">Drag &amp; drop label photos here</div>
+      <div class="dz-secondary">or click to browse — up to 300 files at once</div>
+      <div class="dz-filelist" id="batch-file-list"></div>
+      <input type="file" id="batch-images" accept="image/*" multiple />
+    </div>
+
+    <label>Application data <span class="label-hint">(JSON array, one entry per image, same order)</span></label>
+    <textarea id="batch-json" rows="10" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:13px;" placeholder='[
+  {"brand_name": "OLD TOM DISTILLERY", "class_type": "Kentucky Straight Bourbon Whiskey", "alcohol_content": "45% Alc./Vol.", "net_contents": "750 mL"},
+  {"brand_name": "...", "class_type": "...", "net_contents": "750 mL"}
+]'></textarea>
+    <div class="hint">Tip: for a quick demo, load the sample batch below instead of typing this by hand.</div>
+    <button class="secondary" id="load-sample-batch" style="margin-top:10px">Load sample batch data</button>
+
+    <div><button class="primary" id="batch-submit">Verify Batch</button></div>
+    <div id="batch-loading" style="display:none">
+      <div class="hint" id="batch-loading-label">⏳ Processing batch — items run concurrently…</div>
+      <div class="progress-track"><div class="progress-fill" id="batch-progress-fill"></div></div>
+      <div class="progress-label"><span id="batch-progress-count">0 / 0 processed</span><span id="batch-progress-pct">0%</span></div>
+    </div>
+  </div>
+
+  <div id="batch-rows">
+    <div class="batch-summary">
+      <div><b id="b-total">0</b>Total</div>
+      <div><b id="b-pass" style="color:var(--pass)">0</b>Passed</div>
+      <div><b id="b-fail" style="color:var(--fail)">0</b>Failed</div>
+      <div><b id="b-review" style="color:var(--review)">0</b>Needs Review</div>
+      <div><b id="b-error" style="color:var(--fail)">0</b>Errors</div>
+    </div>
+    <div class="table-toolbar">
+      <input type="text" id="batch-search" placeholder="Search by filename…" />
+      <select id="batch-filter">
+        <option value="all">All verdicts</option>
+        <option value="pass">Passed only</option>
+        <option value="fail">Failed only</option>
+        <option value="needs_review">Needs review only</option>
+        <option value="error">Errors only</option>
+      </select>
+      <button class="secondary" id="batch-export">⬇ Export CSV</button>
+    </div>
+    <div id="batch-items"></div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const API_BASE = "/api";
+
+// ---------- Tabs ----------
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-single").style.display = btn.dataset.tab === "single" ? "block" : "none";
+    document.getElementById("tab-batch").style.display = btn.dataset.tab === "batch" ? "block" : "none";
+    document.getElementById("results").style.display = "none";
+    document.getElementById("batch-rows").style.display = "none";
+  });
+});
+
+document.getElementById("s-is-import").addEventListener("change", (e) => {
+  const show = e.target.value === "true";
+  document.getElementById("s-country-label").style.display = show ? "block" : "none";
+  document.getElementById("s-country").style.display = show ? "block" : "none";
+});
+
+// ---------- Single verification ----------
+function badgeClass(status) { return status; }
+
+function renderFieldResults(fields) {
+  const container = document.getElementById("field-results");
+  container.innerHTML = "";
+  fields.forEach(f => {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    row.innerHTML = `
+      <div class="field-accent ${badgeClass(f.status)}"></div>
+      <div class="field-body">
+        <div class="field-top">
+          <div class="field-name">${f.field.replace(/_/g," ")}</div>
+          <div class="badge ${badgeClass(f.status)}">${f.status.replace("_"," ")}</div>
+        </div>
+        <div class="field-values">
+          ${f.label_value ? `<b>On label:</b> ${escapeHtml(f.label_value)}` : "<i>Not found on label</i>"}
+          ${f.application_value ? ` &nbsp;·&nbsp; <b>Filed:</b> ${escapeHtml(f.application_value)}` : ""}
+        </div>
+        <div class="field-reason">${escapeHtml(f.reason)}</div>
+      </div>`;
+    container.appendChild(row);
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.innerText = str;
+  return div.innerHTML;
+}
+
+function showStatusBanner(status) {
+  const banner = document.getElementById("status-banner");
+  banner.className = status;
+  const labelMap = { pass: "✅ PASS — Label matches application", fail: "❌ FAIL — Discrepancies found", needs_review: "⚠️ NEEDS REVIEW — One or more fields need a human judgment call" };
+  banner.textContent = labelMap[status] || status;
+}
+
+document.getElementById("s-submit").addEventListener("click", async () => {
+  const errorBox = document.getElementById("error-box");
+  errorBox.style.display = "none";
+  const imageInput = document.getElementById("single-image");
+  if (!imageInput.files.length) {
+    errorBox.textContent = "Please select a label photo first.";
+    errorBox.style.display = "block";
+    return;
+  }
+  const applicationData = {
+    beverage_type: document.getElementById("s-beverage-type").value,
+    brand_name: document.getElementById("s-brand-name").value,
+    class_type: document.getElementById("s-class-type").value,
+    alcohol_content: document.getElementById("s-abv").value || null,
+    net_contents: document.getElementById("s-net-contents").value,
+    bottler_info: document.getElementById("s-bottler").value || null,
+    is_import: document.getElementById("s-is-import").value === "true",
+    country_of_origin: document.getElementById("s-country").value || null,
+  };
+  if (!applicationData.brand_name || !applicationData.class_type || !applicationData.net_contents) {
+    errorBox.textContent = "Brand name, class/type, and net contents are required.";
+    errorBox.style.display = "block";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("label_image", imageInput.files[0]);
+  formData.append("application_data", JSON.stringify(applicationData));
+
+  document.getElementById("loading").style.display = "flex";
+  document.getElementById("s-submit").disabled = true;
+  document.getElementById("results").style.display = "none";
+
+  try {
+    const resp = await fetch(`${API_BASE}/verify`, { method: "POST", body: formData });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "Verification failed.");
+    showStatusBanner(data.overall_status);
+    renderFieldResults(data.fields);
+    resetDecisionPanel();
+    document.getElementById("results").style.display = "block";
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.style.display = "block";
+  } finally {
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("s-submit").disabled = false;
+  }
+});
+
+// ---------- Agent decision (Approve / Reject / Flag) ----------
+let pendingDecision = null;
+
+function resetDecisionPanel() {
+  pendingDecision = null;
+  document.getElementById("decision-comment-wrap").style.display = "none";
+  document.getElementById("decision-comment").value = "";
+  document.getElementById("decision-outcome").style.display = "none";
+}
+
+document.querySelectorAll(".decision-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const decision = btn.dataset.decision;
+    if (decision === "approve") {
+      recordDecision("approve", "");
+      return;
+    }
+    // Reject and Flag require a short comment first.
+    pendingDecision = decision;
+    document.getElementById("decision-comment-wrap").style.display = "block";
+    document.getElementById("decision-outcome").style.display = "none";
+    document.getElementById("decision-comment").focus();
+  });
+});
+
+document.getElementById("decision-confirm").addEventListener("click", () => {
+  const comment = document.getElementById("decision-comment").value.trim();
+  if (!comment) {
+    document.getElementById("decision-comment").style.borderColor = "var(--fail)";
+    return;
+  }
+  recordDecision(pendingDecision, comment);
+});
+
+function recordDecision(decision, comment) {
+  const outcome = document.getElementById("decision-outcome");
+  const labelMap = { approve: "✅ Approved", reject: "❌ Rejected", flag: "🚩 Flagged for Manual Review" };
+  const bgMap = { approve: "var(--pass-bg)", reject: "var(--fail-bg)", flag: "var(--review-bg)" };
+  const colorMap = { approve: "var(--pass)", reject: "var(--fail)", flag: "var(--review)" };
+  outcome.style.background = bgMap[decision];
+  outcome.style.color = colorMap[decision];
+  outcome.textContent = `${labelMap[decision]}${comment ? " — " + comment : ""}`;
+  outcome.style.display = "block";
+  document.getElementById("decision-comment-wrap").style.display = "none";
+}
+
+// ---------- Drag & drop (single + batch dropzones) ----------
+function wireDropzone(zoneId, inputId, onFilesChanged) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  zone.addEventListener("click", () => input.click());
+  ["dragenter", "dragover"].forEach(evt =>
+    zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.add("dragover"); })
+  );
+  ["dragleave", "drop"].forEach(evt =>
+    zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.remove("dragover"); })
+  );
+  zone.addEventListener("drop", (e) => {
+    if (e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      onFilesChanged(input.files);
+    }
+  });
+  input.addEventListener("change", () => onFilesChanged(input.files));
+}
+
+wireDropzone("single-dropzone", "single-image", (files) => {
+  document.getElementById("single-file-name").textContent = files.length ? files[0].name : "";
+});
+
+// ---------- Batch verification ----------
+wireDropzone("batch-dropzone", "batch-images", (files) => {
+  const list = document.getElementById("batch-file-list");
+  list.innerHTML = Array.from(files).map(f => `• ${f.name}`).join("<br>");
+});
+
+document.getElementById("load-sample-batch").addEventListener("click", () => {
+  document.getElementById("batch-json").value = JSON.stringify([
+    { brand_name: "OLD TOM DISTILLERY", class_type: "Kentucky Straight Bourbon Whiskey", alcohol_content: "45% Alc./Vol. (90 Proof)", net_contents: "750 mL", bottler_info: "Old Tom Distillery, Bardstown, KY" },
+    { brand_name: "STONE'S THROW", class_type: "American Craft Vodka", alcohol_content: "40% Alc./Vol.", net_contents: "750 mL", bottler_info: "Stone's Throw Distilling Co." }
+  ], null, 2);
+});
+
+function setBatchProgress(completed, total) {
+  const pct = total ? Math.round((completed / total) * 100) : 0;
+  document.getElementById("batch-progress-fill").style.width = `${pct}%`;
+  document.getElementById("batch-progress-count").textContent = `${completed} / ${total} processed`;
+  document.getElementById("batch-progress-pct").textContent = `${pct}%`;
+}
+
+document.getElementById("batch-submit").addEventListener("click", async () => {
+  const errorBox = document.getElementById("batch-error-box");
+  errorBox.textContent = "";
+  const imageInput = document.getElementById("batch-images");
+  if (!imageInput.files.length) {
+    errorBox.textContent = "Please select at least one label photo.";
+    return;
+  }
+  let applications;
+  try {
+    applications = JSON.parse(document.getElementById("batch-json").value);
+    if (!Array.isArray(applications)) throw new Error("must be a JSON array");
+  } catch (e) {
+    errorBox.textContent = "Application data JSON is invalid: " + e.message;
+    return;
+  }
+  if (applications.length !== imageInput.files.length) {
+    errorBox.textContent = `Mismatch: ${imageInput.files.length} images but ${applications.length} application entries.`;
+    return;
+  }
+
+  const formData = new FormData();
+  Array.from(imageInput.files).forEach(f => formData.append("label_images", f));
+  formData.append("application_data", JSON.stringify(applications));
+
+  document.getElementById("batch-loading").style.display = "block";
+  document.getElementById("batch-submit").disabled = true;
+  document.getElementById("batch-rows").style.display = "none";
+  setBatchProgress(0, imageInput.files.length);
+  document.getElementById("batch-loading-label").textContent = "⏳ Ingesting & verifying labels…";
+
+  try {
+    const resp = await fetch(`${API_BASE}/verify/batch/stream`, { method: "POST", body: formData });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || "Batch verification failed.");
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // last partial line stays in buffer
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "progress") {
+          setBatchProgress(event.completed, event.total);
+        } else if (event.type === "done") {
+          renderBatchResults(event.result);
+        }
+      }
+    }
+  } catch (err) {
+    errorBox.textContent = err.message;
+  } finally {
+    document.getElementById("batch-loading").style.display = "none";
+    document.getElementById("batch-submit").disabled = false;
+  }
+});
+
+let lastBatchResults = null;
+
+function renderBatchResults(data) {
+  lastBatchResults = data;
+  document.getElementById("b-total").textContent = data.total;
+  document.getElementById("b-pass").textContent = data.passed;
+  document.getElementById("b-fail").textContent = data.failed;
+  document.getElementById("b-review").textContent = data.needs_review;
+  document.getElementById("b-error").textContent = data.errored;
+  document.getElementById("batch-search").value = "";
+  document.getElementById("batch-filter").value = "all";
+  renderBatchItemList(data.items);
+  document.getElementById("batch-rows").style.display = "block";
+}
+
+function renderBatchItemList(items) {
+  const search = document.getElementById("batch-search").value.trim().toLowerCase();
+  const filter = document.getElementById("batch-filter").value;
+  const container = document.getElementById("batch-items");
+  container.innerHTML = "";
+  items
+    .filter(item => !search || item.label_filename.toLowerCase().includes(search))
+    .filter(item => {
+      if (filter === "all") return true;
+      const status = item.error ? "error" : item.result.overall_status;
+      return status === filter;
+    })
+    .forEach(item => {
+      const div = document.createElement("div");
+      div.className = "batch-item";
+      const status = item.error ? "fail" : item.result.overall_status;
+      const statusLabel = item.error ? "ERROR" : status.replace("_", " ").toUpperCase();
+      div.innerHTML = `<span>${escapeHtml(item.label_filename)}</span><span class="badge ${status}">${statusLabel}</span>`;
+      div.addEventListener("click", () => showBatchDetail(item));
+      container.appendChild(div);
+    });
+}
+
+document.getElementById("batch-search").addEventListener("input", () => {
+  if (lastBatchResults) renderBatchItemList(lastBatchResults.items);
+});
+document.getElementById("batch-filter").addEventListener("change", () => {
+  if (lastBatchResults) renderBatchItemList(lastBatchResults.items);
+});
+
+document.getElementById("batch-export").addEventListener("click", () => {
+  if (!lastBatchResults) return;
+  const rows = [["filename", "overall_status", "field", "field_status", "label_value", "application_value", "reason"]];
+  lastBatchResults.items.forEach(item => {
+    if (item.error) {
+      rows.push([item.label_filename, "error", "", "", "", "", item.error]);
+      return;
+    }
+    item.result.fields.forEach(f => {
+      rows.push([item.label_filename, item.result.overall_status, f.field, f.status, f.label_value || "", f.application_value || "", f.reason]);
+    });
+  });
+  const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "batch_verification_results.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function showBatchDetail(item) {
+  const modal = document.getElementById("modal-content");
+  if (item.error) {
+    modal.innerHTML = `<h3>${escapeHtml(item.label_filename)}</h3><p style="color:var(--fail)">${escapeHtml(item.error)}</p>`;
+  } else {
+    const rows = item.result.fields.map(f => `
+      <div class="field-row">
+        <div class="field-accent ${f.status}"></div>
+        <div class="field-body">
+          <div class="field-top">
+            <div class="field-name">${f.field.replace(/_/g," ")}</div>
+            <div class="badge ${f.status}">${f.status.replace("_"," ")}</div>
+          </div>
+          <div class="field-values">
+            ${f.label_value ? `<b>On label:</b> ${escapeHtml(f.label_value)}` : "<i>Not found</i>"}
+            ${f.application_value ? ` &nbsp;·&nbsp; <b>Filed:</b> ${escapeHtml(f.application_value)}` : ""}
+          </div>
+          <div class="field-reason">${escapeHtml(f.reason)}</div>
+        </div>
+      </div>`).join("");
+    modal.innerHTML = `<h3>${escapeHtml(item.label_filename)}</h3>${rows}<button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
+  }
+  document.getElementById("modal-backdrop").classList.add("open");
+  document.getElementById("modal-close").addEventListener("click", () => {
+    document.getElementById("modal-backdrop").classList.remove("open");
+  });
+}
+
+document.getElementById("modal-backdrop").addEventListener("click", (e) => {
+  if (e.target.id === "modal-backdrop") e.target.classList.remove("open");
+});
+</script>
+</body>
+</html>
