@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 load_dotenv()
 
-from app.routers import verify  # noqa: E402  (import after load_dotenv on purpose)
+from app.routers import applications, verify  # noqa: E402  (import after load_dotenv on purpose)
 
 app = FastAPI(
     title="TTB Label Verification Prototype",
@@ -25,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(verify.router, prefix="/api")
+app.include_router(applications.router, prefix="/api")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
 
