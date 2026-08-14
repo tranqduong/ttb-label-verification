@@ -81,3 +81,30 @@ class BatchVerificationResult(BaseModel):
     errored: int
     items: list[BatchItemResult]
     processing_time_ms: int
+
+
+class ApplicationStatus(str, Enum):
+    """Review workflow state for a persisted Application Queue entry.
+
+    Distinct from VerificationResult.overall_status (pass/fail/needs_review),
+    which is the *automated* compliance verdict. This is the *human
+    reviewer's* disposition on that verdict:
+      - needs_review: default state for every fresh submission — nobody has
+        acted on it yet, regardless of what the automated verdict said.
+      - flagged: reviewer wants a second set of eyes / escalation before
+        deciding either way.
+      - pending: reviewer rejected the label — read as "pending
+        resubmission from the applicant" (a corrected label/application),
+        not a dead end.
+      - approved: reviewer signed off.
+    """
+
+    needs_review = "needs_review"
+    flagged = "flagged"
+    pending = "pending"
+    approved = "approved"
+
+
+class UpdateApplicationStatusRequest(BaseModel):
+    status: ApplicationStatus
+    note: Optional[str] = Field(None, description="Reviewer's note — required by the frontend for flag/reject.")
