@@ -128,7 +128,14 @@ def extract_label_fields(image_bytes: bytes, filename: str = "label.jpg") -> tup
             "ANTHROPIC_API_KEY is not set. Add it to your .env file (see README) before running verification."
         )
 
-    client = Anthropic(api_key=api_key)
+    # Explicit timeout + a single retry: the Anthropic SDK's default
+    # "Connection error." message swallows the real underlying cause
+    # (DNS failure, TLS failure, read timeout, etc.), which makes
+    # diagnosing serverless networking issues (e.g. on Vercel) painful.
+    # We keep max_retries low here since our own caller (the /verify and
+    # /extract routes) already has to stay under the platform's function
+    # timeout.
+    client = Anthropic(api_key=api_key, timeout=30.0, max_retries=1)
     media_type = _guess_media_type(filename)
     b64_image = base64.standard_b64encode(image_bytes).decode("utf-8")
 
@@ -155,7 +162,17 @@ def extract_label_fields(image_bytes: bytes, filename: str = "label.jpg") -> tup
             ],
         )
     except Exception as exc:  # network/auth/rate-limit errors all land here
-        raise RuntimeError(f"Vision extraction request failed: {exc}") from exc
+        # exc.__cause__ holds the real httpx/httpcore exception (e.g.
+        # "getaddrinfo failed", "SSL: CERTIFICATE_VERIFY_FAILED", a real
+        # timeout, etc.) that the Anthropic SDK's own message ("Connection
+        # error.") hides. Surface both so the actual cause is visible in
+        # the error the frontend displays, instead of just the generic
+        # wrapper text.
+        cause = exc.__cause__
+        detail = f"{type(exc).__name__}: {exc}"
+        if cause is not None:
+            detail += f" | caused by {type(cause).__name__}: {cause}"
+        raise RuntimeError(f"Vision extraction request failed: {detail}") from exc
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
     raw_text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text").strip()
