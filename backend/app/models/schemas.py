@@ -89,8 +89,16 @@ class ApplicationStatus(str, Enum):
     Distinct from VerificationResult.overall_status (pass/fail/needs_review),
     which is the *automated* compliance verdict. This is the *human
     reviewer's* disposition on that verdict:
-      - needs_review: default state for every fresh submission — nobody has
-        acted on it yet, regardless of what the automated verdict said.
+      - pending_analysis: the label image and filed data have been saved to
+        the queue, but vision extraction/comparison hasn't run yet — this
+        is the very first state for every submission. Submission and
+        analysis are deliberately separate steps (see
+        routers/applications.py's submit_application/analyze_application)
+        so a reviewer can browse a backlog of saved images without paying
+        for extraction on every one of them up front; it only runs when a
+        reviewer opens a record and clicks "Analyze Label".
+      - needs_review: analysis has completed but nobody has acted on the
+        result yet, regardless of what the automated verdict said.
       - flagged: reviewer wants a second set of eyes / escalation before
         deciding either way.
       - pending: reviewer rejected the label — read as "pending
@@ -99,6 +107,7 @@ class ApplicationStatus(str, Enum):
       - approved: reviewer signed off.
     """
 
+    pending_analysis = "pending_analysis"
     needs_review = "needs_review"
     flagged = "flagged"
     pending = "pending"
