@@ -3,7 +3,10 @@
 An AI-assisted prototype that checks whether an alcohol beverage label's
 artwork matches the data filed in its COLA application: brand name,
 class/type, ABV, net contents, bottler info, country of origin (imports),
-and the mandatory government health warning statement.
+and the mandatory government health warning statement. Single Label Review
+submissions are persisted to an **Application Queue** — a reviewer can come
+back later, filter by status, and their Approve/Flag/Reject decision (with
+note) is saved, not lost on refresh.
 
 Built for the take-home brief based on discovery interviews with TTB's
 Compliance Division. This is a standalone proof-of-concept — it does **not**
@@ -27,12 +30,17 @@ scope per IT).
    illegible field), and forcing those into a binary pass/fail either
    creates false rejections or silently swallows things a human should
    actually look at.
-4. Results render in a single-page UI designed to be readable at a glance —
-   no hunting for buttons, one clear color-coded verdict per field — with
-   Approve / Reject / Flag actions an agent can record against the result
-   (Reject and Flag require a short comment, per the brief's spec).
+4. Results render as Expected (filed) vs. Detected (on label) field cards,
+   each with a reviewer-facing badge (Match / Minor Variance / On Label /
+   Needs Review / Unreadable / Mismatch — see `badges.py`) — readable at a
+   glance, no hunting for buttons — with Approve / Reject / Flag actions an
+   agent can record against the result (Reject and Flag require a short
+   comment, per the brief's spec). The submission and the decision are both
+   persisted to the Application Queue (Postgres), so a reviewer can leave
+   and come back to it later.
 5. A batch mode accepts multiple label photos + a matching array of
-   application data and processes them concurrently.
+   application data and processes them concurrently. Batch stays stateless
+   by design — see "Application Queue scope" below.
 
 ## Why these specific design decisions
 
@@ -79,6 +87,24 @@ best practices:
   An EU "estimated fill" mark (a trailing "e"/"℮" after the quantity, e.g.
   "750 mL e") is recognized as fill-quantity boilerplate and stripped
   before comparing, not treated as a different unit.
+- **"Minor Variance" is restricted to identity fields — never to alcohol
+  content, net contents, or the government warning.** `verification.py`'s
+  own pass/fail logic already treats a unit-converted match (e.g. "80
+  Proof" on the label against a filed "40%") as a clean pass — that part
+  hasn't changed. What changed is the *presentation* layer (`badges.py`):
+  those regulated/quantitative fields now always render as a plain "Match"
+  or a hard "Mismatch," never a softened "Minor Variance," even though the
+  underlying pass reason text happens to mention a unit conversion. Only
+  brand name, bottler info/address, class/type, and country of origin —
+  free-text identity fields — can show "Minor Variance" on a near-exact
+  pass (Dave's casing/punctuation tolerance). This was corroborated against
+  a second reference implementation of this same brief, whose README makes
+  the identical distinction explicit: free-text fields tolerate
+  formatting differences, but "the Government Warning is held to a
+  stricter, closer-to-verbatim check than other free-text fields... it's
+  statutory language, not a paraphrasable field" — and the same logic
+  extends naturally to ABV and net contents, which are regulated numbers,
+  not prose.
 - **A vision LLM instead of OCR + regex.** Labels vary enormously in layout
   and font, and the warning-statement formatting check specifically needs
   visual cues (bold, capitalization) that plain OCR text loses. An LLM with
@@ -107,12 +133,15 @@ best practices:
   (`/api/verify/batch/stream`), not a decorative animation timed to guess
   how long the batch might take.
 - **Approve / Reject / Flag actions, with a required comment on the
-  latter two.** Straight from the brief's screen spec: an agent needs to
-  act on the tool's verdict, not just read it, and a rejection or
-  escalation should carry a reason for whoever looks at it next. This
-  prototype records the decision client-side for the session only (see
-  "Known limitations" below) rather than persisting it, since there's no
-  database in this build.
+  latter two, persisted to the Application Queue.** Straight from the
+  brief's screen spec: an agent needs to act on the tool's verdict, not
+  just read it, and a rejection or escalation should carry a reason for
+  whoever looks at it next. `PATCH /api/applications/{id}` writes the
+  decision + note to Postgres, so it survives a page refresh or a
+  reviewer coming back to it the next day — this is an upgrade from an
+  earlier build of this prototype that only recorded the decision
+  client-side for the current session (see "Application Queue scope"
+  below for what is and isn't persisted).
 - **Anti-hallucination rules baked into the extraction prompt, not left
   to hope.** Two concrete, verified failure modes shaped this: a vision
   model asked to read a recognized brand's ABV will sometimes recall a
@@ -122,22 +151,41 @@ best practices:
   sounding and wrong — exactly the kind of silent error this tool exists
   to catch, not commit. The prompt explicitly instructs the model to
   transcribe only what's visible and prefer "UNREADABLE" over a guess.
-- **No COLA integration, no persistent storage.** Per IT (Marcus), this is a
-  standalone proof-of-concept; COLA integration has its own authorization
-  requirements and is explicitly a future-procurement question, not part of
-  this prototype. The app does not persist uploaded images or extracted
-  data anywhere — each request is processed and discarded, which sidesteps
-  the PII/retention questions Marcus raised for a prototype (a real
-  deployment would need a retention policy).
+- **No COLA integration.** Per IT (Marcus), this is a standalone
+  proof-of-concept; COLA integration has its own authorization
+  requirements and is explicitly a future-procurement question, not part
+  of this prototype.
+
+### Application Queue scope
+
+Only **Single Label Review** submissions are queued — `POST
+/api/applications/verify` writes the application data, the extracted
+label fields, and the per-field results to Postgres, and the
+Approve/Flag/Reject decision + note persist against that same record.
+**Batch Upload stays stateless**, deliberately: it still calls the
+original `/api/verify/batch` / `/api/verify/batch/stream` endpoints and
+returns results without saving them. Queuing 200-300 batch items would
+need its own pagination/bulk-action UI that's out of scope for this pass,
+and batch's existing CSV export already covers "get all these results
+out" for the importer-dump scenario Sarah described. This does mean the
+PII/retention question Marcus raised is now live for queued submissions
+(unlike the fully-stateless earlier build) — see "Known limitations."
 
 ## Stack
 
 - **Backend:** Python, FastAPI, `anthropic` SDK for the vision call,
-  `rapidfuzz` for similarity scoring, Pydantic for schemas.
+  `rapidfuzz` for similarity scoring, Pydantic for schemas, `asyncpg` for
+  the Application Queue's Postgres persistence.
 - **Frontend:** a single static HTML/CSS/vanilla-JS page (no build step,
   no framework) served directly by FastAPI. Chosen over a React/Vite setup
   because the deliverable is a small prototype, not a maintained product —
   and it means "clone and run" has one moving part, not two.
+- **Persistence:** Postgres, accessed directly via `asyncpg` (no ORM) in
+  `app/services/db.py` — only the Application Queue (Single Label Review
+  submissions + reviewer decisions) is persisted; see "Application Queue
+  scope" above. Locally this needs a `DATABASE_URL` (or `POSTGRES_URL`) env
+  var pointing at any Postgres instance; on Vercel it's provisioned via the
+  project's Storage tab (see Deployment below).
 - **Vision model:** Claude (`claude-haiku-4-5` by default, overridable via
   `ANTHROPIC_VISION_MODEL`). This is a verbatim-transcription task, not one
   needing deep reasoning, so a smaller/faster model is the right fit for
@@ -225,6 +273,19 @@ cd sample_labels && python3 generate_samples.py
   "done", "result": {...}}` line with the same shape `/verify/batch`
   returns. The frontend's batch tab uses this endpoint for its live
   progress bar.
+- `POST /api/applications/verify` — same extraction + comparison as
+  `POST /api/verify`, but persists the result to the Application Queue
+  (Postgres) instead of returning it once and forgetting it. Every new
+  submission starts as `needs_review`. Returns 503 if no Postgres
+  connection string is configured (see Deployment).
+- `GET /api/applications` — list all queued applications, with per-status
+  counts (`all` / `flagged` / `needs_review` / `pending` / `approved`) for
+  the Queue tab's filter chips.
+- `GET /api/applications/{id}` — full detail for one queued application,
+  including per-field results and reviewer-facing badges.
+- `PATCH /api/applications/{id}` — record a reviewer decision:
+  `{"status": "approved" | "flagged" | "pending", "note": "..."}`. `note`
+  is required by the frontend (not the API schema) for `flagged`/`pending`.
 - `GET /healthz` — liveness check.
 
 Interactive API docs (Swagger UI) are available at `/docs` once the server
@@ -232,14 +293,28 @@ is running.
 
 ## Deployment
 
-Any platform that runs a Python ASGI app works (Render, Railway, Fly.io,
-etc). Minimum steps:
+The deployed instance for this take-home runs on **Vercel**: the frontend
+is a static file, and `api/index.py` is a single Python serverless function
+(`vercel.json` routes `/api/*` to it and raises its `maxDuration` to 60s for
+the vision call). Any other platform that runs a Python ASGI app also works
+(Render, Railway, Fly.io, etc) — swap step 2 below for that platform's
+start-command equivalent.
+
+Minimum steps:
 
 1. Set the `ANTHROPIC_API_KEY` environment variable in the platform's
-   secrets/config.
-2. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   (from the `backend/` directory).
-3. No database or persistent volume is required — the app is stateless.
+   secrets/config. `/api/verify` and `/api/verify/batch*` (the stateless
+   endpoints) work with just this.
+2. On a non-Vercel platform, start command: `uvicorn app.main:app --host
+   0.0.0.0 --port $PORT` (from the `backend/` directory). On Vercel this is
+   handled by `api/index.py` + `vercel.json` — no start command to set.
+3. **For the Application Queue:** provision a Postgres database and set
+   `DATABASE_URL` (or `POSTGRES_URL`). On Vercel this is one click — add
+   Postgres from the project's **Storage** tab, which auto-injects the
+   connection string as an env var, no manual credential entry. Without
+   this, `/api/applications/*` returns `503` with a message explaining why;
+   `/api/verify` (stateless single-label) and `/api/verify/batch*` are
+   unaffected either way, since they never touch the database.
 
 **Network note (per IT feedback):** the failed vendor pilot lost features
 because the agency firewall blocked outbound calls to the vendor's ML
@@ -287,12 +362,20 @@ brief's ask for "a working core application... with documented trade-offs":
   alternate phrasings or size/placement rules beyond caps/bold, since the
   brief didn't specify those and confirming the full rule set was out of
   scope for the time box.
-- **No authentication, rate limiting, or persistent audit log — and the
-  Approve/Reject/Flag decision isn't saved anywhere.** Fine for a
-  prototype demo; a production tool handling real applications would need
-  all of these, plus the retention-policy conversation Marcus flagged. The
-  decision buttons in the UI record an in-session confirmation only —
-  refreshing the page loses it.
+- **No authentication or rate limiting.** The Application Queue now
+  persists submissions and reviewer decisions (Postgres — see "Application
+  Queue scope" above), which is a real change from an earlier build of
+  this prototype that discarded everything per-request; but there's still
+  no login, no per-agent attribution on a decision, and no rate limiting.
+  A production tool handling real applications would need all of these,
+  plus the retention-policy conversation Marcus flagged, now that
+  application data and label photos' extracted text genuinely persist
+  rather than being processed-and-discarded.
+- **Batch Upload results are still not persisted, by design.** See
+  "Application Queue scope" above for the reasoning (no bulk-action UI in
+  scope, CSV export already covers extraction). This means the
+  PII/retention question only applies to the Single Label Review /
+  Application Queue path, not batch.
 - **Single beverage-type schema.** TTB's exact required fields vary by
   beverage type (beer/wine/spirits); this prototype uses one common-
   denominator schema with a `beverage_type` selector for context, rather
