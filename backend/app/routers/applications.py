@@ -61,6 +61,7 @@ def _summarize(record: dict) -> dict:
         details_parts.append(app_data["alcohol_content"])
     return {
         "id": record["id"],
+        "display_id": record.get("display_id"),
         "created_at": record["created_at"],
         "status": record["status"],
         "brand_name": app_data.get("brand_name"),
@@ -123,7 +124,7 @@ async def analyze_application(app_id: str):
 
     application = ApplicationData(**record["application"])
     try:
-        extracted, _elapsed_ms = await asyncio.to_thread(
+        extracted, elapsed_ms = await asyncio.to_thread(
             extract_label_fields, image_bytes, filename or "label.jpg"
         )
     except RuntimeError as exc:
@@ -138,6 +139,7 @@ async def analyze_application(app_id: str):
             extracted=extracted.model_dump(mode="json"),
             field_results=[f.model_dump(mode="json") for f in fields],
             overall_status=status,
+            analysis_elapsed_ms=elapsed_ms,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -160,6 +162,26 @@ async def get_application_image(app_id: str):
     image_bytes, filename = image
     media_type = "image/png" if (filename or "").lower().endswith(".png") else "image/jpeg"
     return Response(content=image_bytes, media_type=media_type)
+
+
+@router.post("/applications/{app_id}/image")
+async def replace_application_image(app_id: str, label_image: UploadFile = File(...)):
+    """Swaps in a new label photo for an application and resets it to
+    `pending_analysis`, clearing the prior analysis result and reviewer
+    note (both applied to the old photo). Backs the reviewer-facing
+    "Request re-upload / Replace image" action -- both the whole-submission
+    control and the per-field "Request re-upload" action shown on an
+    Unreadable field call this same endpoint."""
+    image_bytes = await label_image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="Uploaded label image is empty.")
+    try:
+        updated = await db.replace_image(app_id, image_bytes, label_image.filename or "label.jpg")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    return _with_badges(updated)
 
 
 @router.get("/applications")
