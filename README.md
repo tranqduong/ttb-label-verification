@@ -49,7 +49,25 @@ scope per IT).
    submission, its analysis result, and the decision are all persisted to
    the Application Queue (Postgres), so a reviewer can leave and come back
    to it later.
-5. A batch mode accepts multiple label photos + a matching array of
+5. The Application Queue detail view adds the recovery/navigation
+   affordances a reviewer actually needs once a submission is sitting in
+   the queue, not just a read-only result: a human-readable ID
+   (`A-00042`, backed by a `seq` column — see "API" below) instead of a
+   raw UUID; Prev/Next buttons that walk the same filtered/sorted list the
+   reviewer opened the record from; zoom (buttons + scroll wheel) and
+   drag-to-pan on the label photo, since a phone photo's fine print is
+   often too small to judge at a fixed size; "Analyzed in Xs" plus a
+   "Reanalyze" button once analysis has run; a page-level warning banner
+   when the vision model reported low overall extraction confidence; an
+   inline explainer directly above the Government Warning field's card
+   noting why it's held to a stricter standard; and, when a field's badge
+   is "Unreadable" (or the reviewer just doesn't trust the photo), a
+   "Request re-upload / Replace image" control — both the whole-submission
+   version and the per-field one on an Unreadable field — that swaps in a
+   new photo via `POST /api/applications/{id}/image` and resets the record
+   to `pending_analysis` so it goes through analysis again against the new
+   image.
+6. A batch mode accepts multiple label photos + a matching array of
    application data and processes them concurrently, analyzing
    immediately (there's no reviewer-facing queue to browse first in batch
    mode). Batch stays stateless by design — see "Application Queue scope"
@@ -296,18 +314,28 @@ cd sample_labels && python3 generate_samples.py
   (see Deployment).
 - `POST /api/applications/{id}/analyze` — runs the same extraction +
   comparison as `POST /api/verify` against the image already on file for
-  that application, persists the result, and moves the record to
-  `needs_review`. Safe to call again (re-runs extraction and overwrites
-  the previous result).
+  that application, persists the result (plus the extraction call's
+  elapsed time, as `analysis_elapsed_ms`), and moves the record to
+  `needs_review`. Safe to call again — this is also what the frontend's
+  "Reanalyze" button and each field card's "Retry analysis" action call;
+  each re-run just overwrites the previous result.
 - `GET /api/applications/{id}/image` — serves back the label photo saved
   with a submission, so the Queue detail view can show it before (and
   after) analysis has run.
+- `POST /api/applications/{id}/image` — multipart form: `label_image`
+  (file). Swaps in a new label photo for an application and resets it to
+  `pending_analysis`, clearing the prior analysis result and reviewer note
+  (both applied to the old photo). Backs the frontend's "Request re-upload
+  / Replace image" controls — the whole-submission one in the Queue detail
+  view and the per-field one shown on an "Unreadable" field card both call
+  this same endpoint.
 - `GET /api/applications` — list all queued applications, with per-status
   counts (`all` / `pending_analysis` / `flagged` / `needs_review` /
-  `pending` / `approved`) for the Queue tab's filter chips.
+  `pending` / `approved`) for the Queue tab's filter chips. Each item
+  includes a `display_id` (e.g. `A-00042`) for reviewer-facing reference.
 - `GET /api/applications/{id}` — full detail for one queued application,
-  including per-field results and reviewer-facing badges (empty until
-  analysis has run).
+  including per-field results, reviewer-facing badges (empty until
+  analysis has run), `display_id`, and `analysis_elapsed_ms`.
 - `PATCH /api/applications/{id}` — record a reviewer decision:
   `{"status": "approved" | "flagged" | "pending", "note": "..."}`. `note`
   is required by the frontend (not the API schema) for `flagged`/`pending`.
