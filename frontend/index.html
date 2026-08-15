@@ -487,6 +487,70 @@
 
   .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
   .detail-note-wrap { margin-top: 14px; }
+
+  /* ---------- Info banners (image-quality warning, government-warning explainer) ---------- */
+  .info-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--review-bg);
+    color: var(--review);
+    border: 1.5px solid var(--review-border);
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 14px;
+  }
+  .info-banner.neutral { background: var(--neutral-bg); color: var(--ink-soft); border-color: var(--neutral-border); }
+
+  /* ---------- Queue detail: header row, Prev/Next nav, zoom/pan image, analysis meta ---------- */
+  .detail-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .detail-nav { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .detail-nav button.secondary { padding: 7px 12px; font-size: 12.5px; }
+  .detail-nav .hint { margin: 0; white-space: nowrap; }
+
+  .image-zoom-wrap {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    margin-top: 14px;
+    background: var(--canvas);
+    height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+  }
+  .image-zoom-wrap.dragging { cursor: grabbing; }
+  .image-zoom-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    user-select: none;
+    -webkit-user-drag: none;
+    will-change: transform;
+  }
+  .zoom-controls { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .zoom-controls button.icon-btn {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 0;
+  }
+  .zoom-controls button.icon-btn:hover { border-color: var(--brand); color: var(--brand); }
+  .zoom-controls .reupload-btn { margin-left: auto; }
+
+  .analysis-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .analysis-meta-row .hint { margin: 0; }
+
+  .field-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .field-card-actions button { font-size: 12px; padding: 6px 12px; }
 </style>
 </head>
 <body>
@@ -778,12 +842,35 @@ function titleCaseField(name) {
 // Expected (filed) vs Detected (on label) pair with a status badge —
 // used by both the inline Single Label result and the Application Queue
 // detail modal, so the two views stay visually consistent.
-function renderFieldCards(container, fields) {
+//
+// `opts.onRetry` / `opts.onReupload` are optional click handlers wired
+// onto a field card whose badge is "unreadable" (image quality prevented
+// a confident read) — "Retry analysis" re-runs extraction against the
+// same photo, "Request re-upload" opens the same replace-image flow as
+// the whole-submission control in the Queue detail view. Omit both to
+// render the cards with no per-field recovery actions (e.g. the inline
+// Single Label result, which has no queue-detail navigation context).
+function renderFieldCards(container, fields, opts) {
+  opts = opts || {};
   container.innerHTML = "";
   fields.forEach(f => {
     const meta = BADGE_META[f.badge] || { cls: f.status, label: f.status.replace(/_/g, " ") };
+
+    // The government warning is statutory language held to a stricter,
+    // closer-to-verbatim standard than other free-text fields (see
+    // verification.py's _check_government_warning) — an explainer banner
+    // directly above its card heads off "why is this one so strict?"
+    // before a reviewer reads a Mismatch verdict.
+    if (f.field === "government_warning") {
+      const banner = document.createElement("div");
+      banner.className = "info-banner neutral";
+      banner.innerHTML = `<span>ℹ️</span><span>The government warning is held to a stricter, closer-to-verbatim standard than other fields — it's statutory language (27 CFR 16.21), not a paraphrasable field, so even minor wording or formatting differences are treated as a mismatch.</span>`;
+      container.appendChild(banner);
+    }
+
     const card = document.createElement("div");
     card.className = "field-card";
+    const showActions = f.badge === "unreadable" && (opts.onRetry || opts.onReupload);
     card.innerHTML = `
       <div class="field-card-head">
         <span class="field-name">${titleCaseField(f.field)}</span>
@@ -799,15 +886,105 @@ function renderFieldCards(container, fields) {
           <div class="fc-value ${f.label_value ? "" : "muted"}">${f.label_value ? escapeHtml(f.label_value) : "(not found)"}</div>
         </div>
       </div>
-      <div class="fc-reason">${escapeHtml(f.reason)}</div>`;
+      <div class="fc-reason">${escapeHtml(f.reason)}</div>
+      ${showActions ? `<div class="field-card-actions">
+        ${opts.onRetry ? '<button type="button" class="secondary fc-retry-btn">↻ Retry analysis</button>' : ""}
+        ${opts.onReupload ? '<button type="button" class="secondary fc-reupload-btn">🔄 Request re-upload</button>' : ""}
+      </div>` : ""}`;
+    if (showActions && opts.onRetry) card.querySelector(".fc-retry-btn").addEventListener("click", opts.onRetry);
+    if (showActions && opts.onReupload) card.querySelector(".fc-reupload-btn").addEventListener("click", opts.onReupload);
     container.appendChild(card);
   });
+}
+
+// Page-level warning shown when the vision model reported low overall
+// extraction confidence (angled/blurry/glare-affected photo) — a more
+// prominent heads-up than the per-field "Unreadable" badges alone, so a
+// reviewer sees it before reading individual verdicts.
+function renderImageQualityBanner(container, extracted) {
+  if (!extracted || extracted.extraction_confidence !== "low") return;
+  const banner = document.createElement("div");
+  banner.className = "info-banner";
+  banner.innerHTML = `<span>⚠️</span><span>Low image quality detected — this photo may be angled, blurry, or glare-affected, which can make individual field results less reliable. Consider requesting a clearer re-upload before trusting a Fail/Mismatch verdict here.</span>`;
+  container.appendChild(banner);
 }
 
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.innerText = str;
   return div.innerHTML;
+}
+
+// Opens a one-off file picker and POSTs the chosen photo to
+// /applications/{id}/image, replacing the label photo on file and
+// resetting the record to pending_analysis (see db.py's replace_image).
+// Backs both the whole-submission "Request re-upload / Replace image"
+// control and the per-field "Request re-upload" action on an Unreadable
+// field — same underlying action either way.
+function promptReplaceImage(appId, onDone, onError) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.style.display = "none";
+  document.body.appendChild(input);
+  input.addEventListener("change", async () => {
+    if (!input.files.length) { document.body.removeChild(input); return; }
+    const formData = new FormData();
+    formData.append("label_image", input.files[0]);
+    try {
+      const resp = await fetch(`${API_BASE}/applications/${appId}/image`, { method: "POST", body: formData });
+      const updated = await resp.json();
+      if (!resp.ok) throw new Error(updated.detail || "Could not save the new photo.");
+      onDone(updated);
+    } catch (err) {
+      if (onError) onError(err.message);
+    } finally {
+      document.body.removeChild(input);
+    }
+  });
+  input.click();
+}
+
+// Wires zoom (buttons + scroll wheel) and drag-to-pan onto a label image
+// inside the Application Queue detail view. `wrapEl` is the fixed-height,
+// overflow-hidden container; its parent is expected to also contain the
+// #zoom-in-btn / #zoom-out-btn / #zoom-reset-btn controls.
+function attachZoomPan(wrapEl, imgEl) {
+  if (!wrapEl || !imgEl) return;
+  let scale = 1, tx = 0, ty = 0, dragging = false, startX = 0, startY = 0;
+  function apply() {
+    imgEl.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+  apply();
+  wrapEl.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    scale = Math.min(4, Math.max(1, scale + (e.deltaY < 0 ? 0.2 : -0.2)));
+    if (scale === 1) { tx = 0; ty = 0; }
+    apply();
+  }, { passive: false });
+  wrapEl.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    wrapEl.classList.add("dragging");
+    wrapEl.setPointerCapture(e.pointerId);
+    startX = e.clientX - tx;
+    startY = e.clientY - ty;
+  });
+  wrapEl.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    tx = e.clientX - startX;
+    ty = e.clientY - startY;
+    apply();
+  });
+  wrapEl.addEventListener("pointerup", () => { dragging = false; wrapEl.classList.remove("dragging"); });
+  wrapEl.addEventListener("pointerleave", () => { dragging = false; wrapEl.classList.remove("dragging"); });
+  const controlsRow = wrapEl.parentElement.querySelector(".zoom-controls");
+  if (!controlsRow) return;
+  const zoomIn = controlsRow.querySelector("#zoom-in-btn");
+  const zoomOut = controlsRow.querySelector("#zoom-out-btn");
+  const zoomReset = controlsRow.querySelector("#zoom-reset-btn");
+  if (zoomIn) zoomIn.addEventListener("click", () => { scale = Math.min(4, scale + 0.25); apply(); });
+  if (zoomOut) zoomOut.addEventListener("click", () => { scale = Math.max(1, scale - 0.25); if (scale === 1) { tx = 0; ty = 0; } apply(); });
+  if (zoomReset) zoomReset.addEventListener("click", () => { scale = 1; tx = 0; ty = 0; apply(); });
 }
 
 function showStatusBanner(status, brandName) {
@@ -952,8 +1129,28 @@ document.getElementById("analyze-btn").addEventListener("click", async () => {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || "Analysis failed.");
     showStatusBanner(data.overall_status, data.application.brand_name);
+    if (data.analysis_elapsed_ms != null) {
+      document.getElementById("review-meta").textContent += ` (analyzed in ${(data.analysis_elapsed_ms / 1000).toFixed(1)}s)`;
+    }
     document.getElementById("analyze-prompt").style.display = "none";
-    renderFieldCards(document.getElementById("field-results"), data.fields);
+    const fieldResultsEl = document.getElementById("field-results");
+    fieldResultsEl.innerHTML = "";
+    renderImageQualityBanner(fieldResultsEl, data.extracted);
+    const cardsWrap = document.createElement("div");
+    fieldResultsEl.appendChild(cardsWrap);
+    renderFieldCards(cardsWrap, data.fields, {
+      onRetry: () => document.getElementById("analyze-btn").click(),
+      onReupload: () => promptReplaceImage(
+        currentApplicationId,
+        () => {
+          document.getElementById("analyze-prompt").style.display = "block";
+          fieldResultsEl.innerHTML = "";
+          document.getElementById("decision-card").style.display = "none";
+          document.getElementById("review-meta").textContent = "New photo saved — analysis hasn't run yet.";
+        },
+        (msg) => { errorBox.textContent = msg; errorBox.style.display = "block"; }
+      ),
+    });
     resetDecisionPanel();
     document.getElementById("decision-card").style.display = "block";
   } catch (err) {
@@ -1271,6 +1468,10 @@ document.getElementById("modal-backdrop").addEventListener("click", (e) => {
 let queueItems = [];
 let queueCounts = { all: 0, flagged: 0, needs_review: 0, pending: 0, approved: 0 };
 let queueFilter = "all";
+// IDs in the currently filtered/sorted table order, captured whenever the
+// table (re)renders — backs the Queue detail view's Prev/Next navigation
+// so it walks the same list the reviewer was actually looking at.
+let currentQueueOrder = [];
 
 async function loadQueue() {
   const meta = document.getElementById("queue-meta");
@@ -1306,6 +1507,7 @@ document.querySelectorAll(".queue-filter-chip").forEach(chip => {
 
 function renderQueueTable() {
   const filtered = queueFilter === "all" ? queueItems : queueItems.filter(i => i.status === queueFilter);
+  currentQueueOrder = filtered.map(i => i.id);
   const table = document.getElementById("queue-table");
   const empty = document.getElementById("queue-empty");
   const tbody = document.getElementById("queue-items");
@@ -1325,7 +1527,7 @@ function renderQueueTable() {
     const submitted = new Date(item.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     const statusLabel = titleCaseField(item.status);
     row.innerHTML = `
-      <td>${idx + 1}</td>
+      <td>${escapeHtml(item.display_id || String(idx + 1))}</td>
       <td><b>${escapeHtml(item.brand_name || "—")}</b><br><span class="hint" style="margin:0">${escapeHtml(item.class_type || "")}</span></td>
       <td>${escapeHtml(item.details)}<br><span class="hint" style="margin:0">${escapeHtml(item.net_contents || "")}</span></td>
       <td>${submitted}</td>
@@ -1358,15 +1560,47 @@ function renderApplicationDetail(record) {
   // applications.py) — show the image on file plus an "Analyze Label"
   // button instead of field cards until a reviewer runs it.
   const isPending = record.status === "pending_analysis";
+
+  const navIds = currentQueueOrder;
+  const curIdx = navIds.indexOf(record.id);
+  const hasPrev = curIdx > 0;
+  const hasNext = curIdx >= 0 && curIdx < navIds.length - 1;
+
   modal.innerHTML = `
-    <h3>${escapeHtml(record.application.brand_name)}</h3>
-    <div class="hint" style="margin-top:-8px;">Submitted ${submitted} · Label file: ${escapeHtml(record.label_filename || "—")}</div>
-    <img src="${API_BASE}/applications/${record.id}/image" alt="Label image on file" style="max-width:100%; border-radius:8px; margin-top:14px; border:1px solid var(--border, #ddd); display:block;" />
+    <div class="detail-header-row">
+      <div>
+        <h3 style="margin-bottom:2px;">${escapeHtml(record.application.brand_name)}</h3>
+        <div class="hint" style="margin:0;">${record.display_id ? escapeHtml(record.display_id) + " · " : ""}Submitted ${submitted} · Label file: ${escapeHtml(record.label_filename || "—")}</div>
+      </div>
+      <div class="detail-nav">
+        <button type="button" class="secondary" id="modal-prev-btn" ${hasPrev ? "" : "disabled"}>‹ Prev</button>
+        ${curIdx >= 0 ? `<span class="hint">${curIdx + 1} of ${navIds.length}</span>` : ""}
+        <button type="button" class="secondary" id="modal-next-btn" ${hasNext ? "" : "disabled"}>Next ›</button>
+      </div>
+    </div>
+    <div id="modal-detail-error" style="display:none; background:var(--fail-bg); color:var(--fail); border:1.5px solid var(--fail-border); padding:10px 14px; border-radius:7px; font-size:13px; margin-top:12px;"></div>
+    <div class="image-zoom-wrap" id="modal-image-wrap">
+      <img id="modal-image" src="${API_BASE}/applications/${record.id}/image" alt="Label image on file" />
+    </div>
+    <div class="zoom-controls">
+      <button type="button" class="icon-btn" id="zoom-out-btn" title="Zoom out">−</button>
+      <button type="button" class="icon-btn" id="zoom-reset-btn" title="Reset zoom">⤾</button>
+      <button type="button" class="icon-btn" id="zoom-in-btn" title="Zoom in">+</button>
+      <button type="button" class="secondary reupload-btn" id="modal-reupload-btn">🔄 Request re-upload / Replace image</button>
+    </div>
     ${isPending ? `
       <div class="hint" style="margin-top:14px;">A label image is already on file for this application. Click "Analyze Label" to compare it against the submitted application data.</div>
       <button class="primary" id="modal-analyze-btn" style="margin-top:10px;">Analyze Label</button>
       <div id="modal-analyze-loading" style="display:none; margin-top:10px;"><span class="spinner"></span> Comparing label photo against filed data…</div>
-    ` : `<div id="modal-field-cards" style="margin-top:16px;"></div>`}
+    ` : `
+      <div class="analysis-meta-row">
+        <span class="hint">${record.analysis_elapsed_ms != null ? `Analyzed in ${(record.analysis_elapsed_ms / 1000).toFixed(1)}s` : "Analyzed"}</span>
+        <button type="button" class="secondary" id="modal-reanalyze-btn">↻ Reanalyze</button>
+        <span id="modal-reanalyze-loading" style="display:none;"><span class="spinner"></span></span>
+      </div>
+      <div id="modal-image-quality-banner" style="margin-top:14px;"></div>
+      <div id="modal-field-cards"></div>
+    `}
     <div class="detail-actions" style="${isPending ? "display:none;" : ""}">
       <button class="decision-btn flag" data-modal-decision="flagged">🚩 Flag for Review</button>
       <button class="decision-btn reject" data-modal-decision="pending">⛔ Reject</button>
@@ -1378,6 +1612,23 @@ function renderApplicationDetail(record) {
     </div>
     <div id="modal-outcome" style="display:none; margin-top:14px; padding:12px 15px; border-radius:7px; font-size:13.5px; font-weight:600;"></div>
     <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
+
+  attachZoomPan(document.getElementById("modal-image-wrap"), document.getElementById("modal-image"));
+
+  const showDetailError = (msg) => {
+    const box = document.getElementById("modal-detail-error");
+    box.textContent = msg;
+    box.style.display = "block";
+  };
+
+  const prevBtn = document.getElementById("modal-prev-btn");
+  const nextBtn = document.getElementById("modal-next-btn");
+  if (hasPrev) prevBtn.addEventListener("click", () => openApplicationDetail(navIds[curIdx - 1]));
+  if (hasNext) nextBtn.addEventListener("click", () => openApplicationDetail(navIds[curIdx + 1]));
+
+  document.getElementById("modal-reupload-btn").addEventListener("click", () => {
+    promptReplaceImage(record.id, updated => renderApplicationDetail(updated), showDetailError);
+  });
 
   if (isPending) {
     document.getElementById("modal-analyze-btn").addEventListener("click", async () => {
@@ -1392,15 +1643,33 @@ function renderApplicationDetail(record) {
       } catch (err) {
         btn.disabled = false;
         document.getElementById("modal-analyze-loading").style.display = "none";
-        const outcome = document.getElementById("modal-outcome");
-        outcome.style.background = "var(--fail-bg)";
-        outcome.style.color = "var(--fail)";
-        outcome.textContent = err.message;
-        outcome.style.display = "block";
+        showDetailError(err.message);
       }
     });
   } else {
-    renderFieldCards(document.getElementById("modal-field-cards"), record.fields);
+    renderImageQualityBanner(document.getElementById("modal-image-quality-banner"), record.extracted);
+
+    const doReanalyze = async () => {
+      const reBtn = document.getElementById("modal-reanalyze-btn");
+      reBtn.disabled = true;
+      document.getElementById("modal-reanalyze-loading").style.display = "inline-flex";
+      try {
+        const resp = await fetch(`${API_BASE}/applications/${record.id}/analyze`, { method: "POST" });
+        const updated = await resp.json();
+        if (!resp.ok) throw new Error(updated.detail || "Analysis failed.");
+        renderApplicationDetail(updated);
+      } catch (err) {
+        reBtn.disabled = false;
+        document.getElementById("modal-reanalyze-loading").style.display = "none";
+        showDetailError(err.message);
+      }
+    };
+    document.getElementById("modal-reanalyze-btn").addEventListener("click", doReanalyze);
+
+    renderFieldCards(document.getElementById("modal-field-cards"), record.fields, {
+      onRetry: doReanalyze,
+      onReupload: () => promptReplaceImage(record.id, updated => renderApplicationDetail(updated), showDetailError),
+    });
   }
 
   document.getElementById("modal-close").addEventListener("click", () => {
