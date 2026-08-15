@@ -37,10 +37,9 @@ There is exactly one trust boundary that matters here: **the browser is untruste
 ## Out of scope for this prototype
 
 - **No user accounts, login, or roles.** Every visitor to the Application Queue can see and modify every submission. A real deployment needs auth in front of the Queue and per-action attribution before it could be trusted with real, non-test filed applications.
-- - **No live COLA integration.** Filed "application data" here is whatever a reviewer types into the form, not pulled from or verified against TTB's actual COLA system -- Marcus's (IT) interview flagged that this app has no live connection to that system, by design, for a prototype.
-  - - **No malware/virus scanning of uploaded images**, beyond basic empty-file and content-type checks.
-    - - **No network allowlisting configured.** Marcus also flagged that production egress is firewalled to an allowlist of domains; this prototype calls the Anthropic API directly. A real deployment would need that endpoint added to the allowlist rather than assuming open egress.
-      - - **No encryption-at-rest guarantee** beyond whatever the underlying Neon/Vercel infrastructure provides by default.
-       
-        - None of the above is a claim that this prototype is production-hardened -- it's meant to make explicit exactly which hardening steps a real deployment would still need, so that gap is a documented decision rather than a silent one.
-        - 
+- **No live COLA integration.** Filed "application data" here is whatever a reviewer types into the form, not pulled from or verified against TTB's actual COLA system -- Marcus's (IT) interview flagged that this app has no live connection to that system, by design, for a prototype.
+- **No malware/virus scanning of uploaded images**, beyond basic empty-file and content-type checks.
+- **No network allowlisting configured.** Marcus also flagged that production egress is firewalled to an allowlist of domains; this prototype calls the Anthropic API directly. A real deployment would need that endpoint added to the allowlist rather than assuming open egress.
+- **No encryption-at-rest guarantee** beyond whatever the underlying Neon/Vercel infrastructure provides by default.
+
+None of the above is a claim that this prototype is production-hardened -- it's meant to make explicit exactly which hardening steps a real deployment would still need, so that gap is a documented decision rather than a silent one.
