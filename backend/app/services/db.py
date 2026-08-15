@@ -87,11 +87,24 @@ async def _ensure_schema(conn: asyncpg.Connection) -> None:
     await conn.execute("ALTER TABLE applications ALTER COLUMN extracted DROP NOT NULL")
     await conn.execute("ALTER TABLE applications ALTER COLUMN field_results DROP NOT NULL")
     await conn.execute("ALTER TABLE applications ALTER COLUMN overall_status DROP NOT NULL")
+    # `seq` backs the reviewer-facing human-readable ID (e.g. "A-00042") --
+    # SERIAL both creates a sequence and backfills existing rows in one
+    # shot, safe to run repeatedly since ADD COLUMN IF NOT EXISTS is a
+    # no-op once it exists. `analysis_elapsed_ms` records how long the
+    # vision extraction call took, surfaced as "Analyzed in Xs" in the
+    # Queue detail view (see routers/applications.py's analyze_application).
+    await conn.execute("ALTER TABLE applications ADD COLUMN IF NOT EXISTS seq SERIAL")
+    await conn.execute("ALTER TABLE applications ADD COLUMN IF NOT EXISTS analysis_elapsed_ms INTEGER")
 
 
 def _row_to_record(row: asyncpg.Record) -> dict:
     return {
         "id": row["id"],
+        # Human-readable ID for reviewers to reference a submission by
+        # (e.g. in conversation or a note) instead of the raw UUID --
+        # backed by the `seq` SERIAL column, formatted like the reference
+        # implementation's "A-00415".
+        "display_id": f"A-{row['seq']:05d}" if row["seq"] is not None else None,
         "created_at": row["created_at"].isoformat(),
         "status": row["status"],
         "application": json.loads(row["application_data"]),
@@ -100,6 +113,7 @@ def _row_to_record(row: asyncpg.Record) -> dict:
         "overall_status": row["overall_status"],
         "label_filename": row["label_filename"],
         "note": row["note"],
+        "analysis_elapsed_ms": row["analysis_elapsed_ms"],
     }
 
 
@@ -117,11 +131,12 @@ async def insert_pending_application(
         await _ensure_schema(conn)
         record_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc)
-        await conn.execute(
+        row = await conn.fetchrow(
             """
             INSERT INTO applications
                 (id, created_at, status, application_data, image_bytes, extracted, field_results, overall_status, label_filename, note)
             VALUES ($1, $2, 'pending_analysis', $3, $4, NULL, NULL, NULL, $5, NULL)
+            RETURNING *
             """,
             record_id,
             created_at,
@@ -131,17 +146,7 @@ async def insert_pending_application(
         )
     finally:
         await conn.close()
-    return {
-        "id": record_id,
-        "created_at": created_at.isoformat(),
-        "status": "pending_analysis",
-        "application": application_data,
-        "extracted": None,
-        "fields": [],
-        "overall_status": None,
-        "label_filename": label_filename,
-        "note": None,
-    }
+    return _row_to_record(row)
 
 
 async def get_application_image(app_id: str) -> Optional[tuple[bytes, Optional[str]]]:
@@ -165,18 +170,23 @@ async def complete_analysis(
     extracted: dict,
     field_results: list,
     overall_status: str,
+    analysis_elapsed_ms: Optional[int] = None,
 ) -> Optional[dict]:
     """Fills in the analysis fields for a `pending_analysis` record and
     moves it to `needs_review` -- the same "nobody has acted on this yet"
     starting point the old one-shot insert_application() used, just
-    reached one step later now that submission and analysis are split."""
+    reached one step later now that submission and analysis are split.
+    Also used for "Reanalyze" (see routers/applications.py) -- re-running
+    this against an already-analyzed record simply overwrites the prior
+    result and elapsed time."""
     conn = await asyncpg.connect(_dsn(), statement_cache_size=0)
     try:
         await _ensure_schema(conn)
         row = await conn.fetchrow(
             """
             UPDATE applications
-            SET extracted = $2, field_results = $3, overall_status = $4, status = 'needs_review'
+            SET extracted = $2, field_results = $3, overall_status = $4,
+                status = 'needs_review', analysis_elapsed_ms = $5
             WHERE id = $1
             RETURNING *
             """,
@@ -184,6 +194,35 @@ async def complete_analysis(
             json.dumps(extracted),
             json.dumps(field_results),
             overall_status,
+            analysis_elapsed_ms,
+        )
+    finally:
+        await conn.close()
+    return _row_to_record(row) if row else None
+
+
+async def replace_image(app_id: str, image_bytes: bytes, label_filename: Optional[str]) -> Optional[dict]:
+    """Swaps in a new label photo for an existing application and resets
+    it to `pending_analysis`, clearing any prior analysis result and
+    reviewer note -- both applied to the old photo, not this one. Backs
+    the reviewer-facing "Request re-upload / Replace image" action (both
+    the whole-submission control and the per-field "Request re-upload"
+    action on an Unreadable field use this same endpoint/function)."""
+    conn = await asyncpg.connect(_dsn(), statement_cache_size=0)
+    try:
+        await _ensure_schema(conn)
+        row = await conn.fetchrow(
+            """
+            UPDATE applications
+            SET image_bytes = $2, label_filename = $3, extracted = NULL,
+                field_results = NULL, overall_status = NULL,
+                analysis_elapsed_ms = NULL, status = 'pending_analysis', note = NULL
+            WHERE id = $1
+            RETURNING *
+            """,
+            app_id,
+            image_bytes,
+            label_filename,
         )
     finally:
         await conn.close()
