@@ -295,23 +295,35 @@ def _check_government_warning(extracted: ExtractedLabel) -> FieldResult:
     norm_required = re.sub(r"[.,]", "", REQUIRED_WARNING_TEXT.upper())
     norm_required = re.sub(r"\s+", " ", norm_required).strip()
 
+    # Cite the specific regulation each issue actually violates, rather than
+    # blanket-citing 16.21 for everything: the statement's required wording
+    # lives in 27 CFR 16.21, but the all-caps-header and bold-type rules are
+    # in 16.22(a)(2) (type size/contrast is also 16.22, under (a)(1)/(b), but
+    # this tool doesn't check those since it only sees a photo, not physical
+    # print size).
     issues = []
+    cites = set()
     if norm_label != norm_required:
         similarity = fuzz.ratio(norm_label, norm_required)
         issues.append(f"wording deviates from the required statutory text (similarity {similarity}%)")
+        cites.add("16.21")
 
     if extracted.government_warning_is_all_caps_header is False:
         issues.append('"GOVERNMENT WARNING:" header is not in all capital letters (required)')
+        cites.add("16.22(a)(2)")
     elif extracted.government_warning_is_all_caps_header is None:
         issues.append("could not confirm header is all-caps from the image — needs manual review")
+        cites.add("16.22(a)(2)")
 
     if extracted.government_warning_appears_bold is False:
         issues.append('"GOVERNMENT WARNING:" header does not appear bold (required)')
+        cites.add("16.22(a)(2)")
 
     if issues:
+        cite_str = " and ".join(f"27 CFR {c}" for c in sorted(cites))
         return FieldResult(
             field="government_warning", label_value=label_text, application_value=REQUIRED_WARNING_TEXT,
-            status="fail", reason="; ".join(issues).capitalize() + " (per 27 CFR 16.21).",
+            status="fail", reason="; ".join(issues).capitalize() + f" (per {cite_str}).",
         )
     return FieldResult(
         field="government_warning", label_value=label_text, application_value=REQUIRED_WARNING_TEXT,
