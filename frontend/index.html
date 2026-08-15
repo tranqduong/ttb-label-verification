@@ -462,7 +462,7 @@
     white-space: nowrap;
   }
   .app-status-badge.needs_review, .app-status-badge.flagged { background: var(--review-bg); color: var(--review); }
-  .app-status-badge.pending { background: var(--neutral-bg); color: var(--neutral); }
+  .app-status-badge.pending, .app-status-badge.pending_analysis { background: var(--neutral-bg); color: var(--neutral); }
   .app-status-badge.approved { background: var(--pass-bg); color: var(--pass); }
 
   /* ---------- Field comparison cards (Expected vs Detected on label) ----------
@@ -588,8 +588,8 @@
           </div>
         </div>
 
-        <button class="primary" id="s-submit">Verify Label</button>
-        <div id="loading"><span class="spinner"></span> Analyzing label — this usually takes a few seconds.</div>
+        <button class="primary" id="s-submit">Save to Queue</button>
+        <div id="loading"><span class="spinner"></span> Saving to the Application Queue…</div>
       </div>
     </div>
   </div>
@@ -598,9 +598,14 @@
     <div class="card">
       <h2 class="section-title">Automated regulatory verification</h2>
       <div class="section-sub">Comparing visual extraction from the uploaded label image against the filed application fields.</div>
+      <div id="analyze-prompt" style="display:none;">
+        <div class="hint" style="margin:14px 0;">A label image is already on file for this application. Click "Analyze Label" to compare it against the filed application data.</div>
+        <button class="primary" id="analyze-btn">Analyze Label</button>
+        <div id="analyze-loading" style="display:none; margin-top:12px;"><span class="spinner"></span> Comparing label photo against filed data…</div>
+      </div>
       <div id="field-results"></div>
     </div>
-    <div class="card">
+    <div class="card" id="decision-card" style="display:none">
       <h2 class="section-title">Reviewer decision &amp; audit log</h2>
       <div class="decision-note"><b>*</b> A short comment is required for Reject or Flag actions.</div>
       <div class="decision-row">
@@ -697,6 +702,7 @@
 
     <div class="queue-filter-row" id="queue-filters">
       <button class="queue-filter-chip active" data-filter="all">All <span class="chip-count" id="qc-all">0</span></button>
+      <button class="queue-filter-chip" data-filter="pending_analysis">Needs Analysis <span class="chip-count" id="qc-pending_analysis">0</span></button>
       <button class="queue-filter-chip" data-filter="flagged">Flagged <span class="chip-count" id="qc-flagged">0</span></button>
       <button class="queue-filter-chip" data-filter="needs_review">Needs Review <span class="chip-count" id="qc-needs_review">0</span></button>
       <button class="queue-filter-chip" data-filter="pending">Pending <span class="chip-count" id="qc-pending">0</span></button>
@@ -904,17 +910,22 @@ document.getElementById("s-submit").addEventListener("click", async () => {
   document.getElementById("results").style.display = "none";
 
   try {
-    // /applications/verify runs the same extraction + comparison as
-    // /verify, but also persists the result to the Application Queue
-    // (see backend/app/routers/applications.py) — data.id is the queue
-    // record's id, used below to wire the Approve/Flag/Reject buttons.
-    const resp = await fetch(`${API_BASE}/applications/verify`, { method: "POST", body: formData });
+    // POST /applications only saves the image + filed data to the
+    // Application Queue as `pending_analysis` — it does NOT run vision
+    // extraction yet. That happens in the separate step below, wired to
+    // the "Analyze Label" button, so a reviewer can browse a backlog of
+    // saved submissions without paying for extraction on every one of
+    // them up front (see backend/app/routers/applications.py).
+    const resp = await fetch(`${API_BASE}/applications`, { method: "POST", body: formData });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || "Verification failed.");
+    if (!resp.ok) throw new Error(data.detail || "Could not save this application.");
     currentApplicationId = data.id;
-    showStatusBanner(data.overall_status, applicationData.brand_name);
-    renderFieldCards(document.getElementById("field-results"), data.fields);
-    resetDecisionPanel();
+    document.getElementById("review-status-pill").style.display = "none";
+    document.getElementById("review-title").textContent = `Application Review: ${applicationData.brand_name}`;
+    document.getElementById("review-meta").textContent = "Saved to the Application Queue — analysis hasn't run yet.";
+    document.getElementById("field-results").innerHTML = "";
+    document.getElementById("decision-card").style.display = "none";
+    document.getElementById("analyze-prompt").style.display = "block";
     document.getElementById("results").style.display = "block";
     document.getElementById("results").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
@@ -926,9 +937,37 @@ document.getElementById("s-submit").addEventListener("click", async () => {
   }
 });
 
+// A label image is saved to the queue without analysis (see the
+// s-submit handler above) — clicking "Analyze Label" is what actually
+// runs extraction + comparison against it, via POST
+// /applications/{id}/analyze.
+document.getElementById("analyze-btn").addEventListener("click", async () => {
+  const errorBox = document.getElementById("error-box");
+  const btn = document.getElementById("analyze-btn");
+  errorBox.style.display = "none";
+  btn.disabled = true;
+  document.getElementById("analyze-loading").style.display = "block";
+  try {
+    const resp = await fetch(`${API_BASE}/applications/${currentApplicationId}/analyze`, { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "Analysis failed.");
+    showStatusBanner(data.overall_status, data.application.brand_name);
+    document.getElementById("analyze-prompt").style.display = "none";
+    renderFieldCards(document.getElementById("field-results"), data.fields);
+    resetDecisionPanel();
+    document.getElementById("decision-card").style.display = "block";
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    document.getElementById("analyze-loading").style.display = "none";
+  }
+});
+
 // ---------- Reviewer decision (Approve / Reject / Flag) ----------
 // Persists to the Application Queue via PATCH /api/applications/{id} —
-// currentApplicationId is set when /applications/verify returns (see the
+// currentApplicationId is set when POST /applications returns (see the
 // s-submit handler above). decision -> ApplicationStatus value mapping:
 // "reject" maps to the "pending" status (read as "pending resubmission
 // from the applicant"), matching backend/app/models/schemas.py's
@@ -1243,7 +1282,7 @@ async function loadQueue() {
     queueCounts = data.counts;
     renderQueueChips();
     renderQueueTable();
-    const needAttention = (queueCounts.needs_review || 0) + (queueCounts.flagged || 0);
+    const needAttention = (queueCounts.pending_analysis || 0) + (queueCounts.needs_review || 0) + (queueCounts.flagged || 0);
     meta.textContent = `${queueCounts.all} application${queueCounts.all === 1 ? "" : "s"} · ${needAttention} need${needAttention === 1 ? "s" : ""} attention`;
   } catch (err) {
     meta.textContent = err.message;
@@ -1251,7 +1290,7 @@ async function loadQueue() {
 }
 
 function renderQueueChips() {
-  ["all", "flagged", "needs_review", "pending", "approved"].forEach(key => {
+  ["all", "pending_analysis", "flagged", "needs_review", "pending", "approved"].forEach(key => {
     document.getElementById(`qc-${key}`).textContent = queueCounts[key] || 0;
   });
 }
@@ -1314,23 +1353,55 @@ async function openApplicationDetail(id) {
 function renderApplicationDetail(record) {
   const modal = document.getElementById("modal-content");
   const submitted = new Date(record.created_at).toLocaleString();
+  // pending_analysis records were only ever saved, never analyzed (see
+  // the two-step submit/analyze split in backend/app/routers/
+  // applications.py) — show the image on file plus an "Analyze Label"
+  // button instead of field cards until a reviewer runs it.
+  const isPending = record.status === "pending_analysis";
   modal.innerHTML = `
     <h3>${escapeHtml(record.application.brand_name)}</h3>
     <div class="hint" style="margin-top:-8px;">Submitted ${submitted} · Label file: ${escapeHtml(record.label_filename || "—")}</div>
-    <div id="modal-field-cards" style="margin-top:16px;"></div>
-    <div class="detail-actions">
+    <img src="${API_BASE}/applications/${record.id}/image" alt="Label image on file" style="max-width:100%; border-radius:8px; margin-top:14px; border:1px solid var(--border, #ddd); display:block;" />
+    ${isPending ? `
+      <div class="hint" style="margin-top:14px;">A label image is already on file for this application. Click "Analyze Label" to compare it against the submitted application data.</div>
+      <button class="primary" id="modal-analyze-btn" style="margin-top:10px;">Analyze Label</button>
+      <div id="modal-analyze-loading" style="display:none; margin-top:10px;"><span class="spinner"></span> Comparing label photo against filed data…</div>
+    ` : `<div id="modal-field-cards" style="margin-top:16px;"></div>`}
+    <div class="detail-actions" style="${isPending ? "display:none;" : ""}">
       <button class="decision-btn flag" data-modal-decision="flagged">🚩 Flag for Review</button>
       <button class="decision-btn reject" data-modal-decision="pending">⛔ Reject</button>
       <button class="decision-btn approve" data-modal-decision="approved">✅ Approve</button>
     </div>
-    <div class="detail-note-wrap">
+    <div class="detail-note-wrap" style="${isPending ? "display:none;" : ""}">
       <label style="margin-top:0">Note <span class="label-hint">(optional for Approve, required for Flag/Reject)</span></label>
       <input type="text" id="modal-note" placeholder="Add a note (optional)" value="${escapeHtml(record.note || "")}" />
     </div>
     <div id="modal-outcome" style="display:none; margin-top:14px; padding:12px 15px; border-radius:7px; font-size:13.5px; font-weight:600;"></div>
     <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
 
-  renderFieldCards(document.getElementById("modal-field-cards"), record.fields);
+  if (isPending) {
+    document.getElementById("modal-analyze-btn").addEventListener("click", async () => {
+      const btn = document.getElementById("modal-analyze-btn");
+      btn.disabled = true;
+      document.getElementById("modal-analyze-loading").style.display = "block";
+      try {
+        const resp = await fetch(`${API_BASE}/applications/${record.id}/analyze`, { method: "POST" });
+        const updated = await resp.json();
+        if (!resp.ok) throw new Error(updated.detail || "Analysis failed.");
+        renderApplicationDetail(updated);
+      } catch (err) {
+        btn.disabled = false;
+        document.getElementById("modal-analyze-loading").style.display = "none";
+        const outcome = document.getElementById("modal-outcome");
+        outcome.style.background = "var(--fail-bg)";
+        outcome.style.color = "var(--fail)";
+        outcome.textContent = err.message;
+        outcome.style.display = "block";
+      }
+    });
+  } else {
+    renderFieldCards(document.getElementById("modal-field-cards"), record.fields);
+  }
 
   document.getElementById("modal-close").addEventListener("click", () => {
     document.getElementById("modal-backdrop").classList.remove("open");
