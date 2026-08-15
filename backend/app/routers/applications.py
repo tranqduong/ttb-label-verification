@@ -2,11 +2,20 @@
 Application Queue endpoints.
 
 /verify (in verify.py) is stateless — it processes one upload and returns
-the result, nothing is kept. This router adds a persisted counterpart:
-every submission through Single Label Review is written to the
-applications table (see app/services/db.py) so it shows up in the
-Application Queue with a submitted date, and a reviewer can Approve/Flag/
-Reject it from either the inline result or the queue later.
+the result, nothing is kept. This router adds a persisted counterpart for
+Single Label Review submissions, split into two steps rather than one:
+
+  1. POST /applications saves the label image + filed application data to
+     the queue as `pending_analysis` — no vision extraction happens yet.
+  2. POST /applications/{id}/analyze runs extraction + comparison against
+     the image already on file and moves the record to `needs_review`.
+
+Splitting these (rather than doing both in one request, which is how this
+used to work) mirrors a second reference implementation of this brief: a
+reviewer can open a queue full of saved submissions and see each one's
+label image immediately, without every single one having paid for a
+vision-extraction call just to land in the queue. Analysis only runs when
+a reviewer actually clicks "Analyze Label" on the one they're looking at.
 
 Scope note: only Single Label Review submissions are queued. Batch Upload
 stays the stateless concurrent-triage tool it already was — queuing 300
@@ -18,6 +27,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from app.models.schemas import ApplicationData, FieldResult, UpdateApplicationStatusRequest
 from app.services import db
@@ -62,16 +72,15 @@ def _summarize(record: dict) -> dict:
     }
 
 
-@router.post("/applications/verify")
-async def verify_and_queue(
+@router.post("/applications", status_code=201)
+async def submit_application(
     label_image: UploadFile = File(...),
     application_data: str = Form(..., description="JSON-encoded ApplicationData"),
 ):
-    """Same extraction + comparison as POST /verify, but persists the
-    result into the Application Queue instead of returning it once and
-    forgetting it. Every submission starts as needs_review — see
-    ApplicationStatus in schemas.py for why — the reviewer workflow
-    (Approve/Flag/Reject) is what moves it from there."""
+    """Saves the label image + filed application data to the Application
+    Queue as `pending_analysis` -- no extraction runs here. See
+    analyze_application() below for the step that actually compares the
+    image against the filed data."""
     try:
         application = ApplicationData(**json.loads(application_data))
     except (json.JSONDecodeError, ValueError) as exc:
@@ -81,9 +90,42 @@ async def verify_and_queue(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="Uploaded label image is empty.")
 
-    filename = label_image.filename or "label.jpg"
     try:
-        extracted, _elapsed_ms = await asyncio.to_thread(extract_label_fields, image_bytes, filename)
+        record = await db.insert_pending_application(
+            application_data=application.model_dump(mode="json"),
+            image_bytes=image_bytes,
+            label_filename=label_image.filename or "label.jpg",
+        )
+    except RuntimeError as exc:
+        # No Postgres storage provisioned yet -- see db.py's error message.
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    return _with_badges(record)
+
+
+@router.post("/applications/{app_id}/analyze")
+async def analyze_application(app_id: str):
+    """Runs vision extraction + comparison against the image already on
+    file for this application (saved via POST /applications above), then
+    persists the result and moves the record from `pending_analysis` to
+    `needs_review`. Safe to call more than once -- each call just re-runs
+    extraction and overwrites the previous result."""
+    try:
+        image = await db.get_application_image(app_id)
+        record = await db.get_application(app_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if not record:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    if not image:
+        raise HTTPException(status_code=404, detail="This application has no label image on file.")
+    image_bytes, filename = image
+
+    application = ApplicationData(**record["application"])
+    try:
+        extracted, _elapsed_ms = await asyncio.to_thread(
+            extract_label_fields, image_bytes, filename or "label.jpg"
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -91,18 +133,33 @@ async def verify_and_queue(
     status = overall_status(fields)
 
     try:
-        record = await db.insert_application(
-            application_data=application.model_dump(mode="json"),
+        updated = await db.complete_analysis(
+            app_id,
             extracted=extracted.model_dump(mode="json"),
             field_results=[f.model_dump(mode="json") for f in fields],
             overall_status=status,
-            label_filename=filename,
         )
     except RuntimeError as exc:
-        # No Postgres storage provisioned yet -- see db.py's error message.
         raise HTTPException(status_code=503, detail=str(exc))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Application not found.")
 
-    return _with_badges(record)
+    return _with_badges(updated)
+
+
+@router.get("/applications/{app_id}/image")
+async def get_application_image(app_id: str):
+    """Serves back the label photo saved with a submission, so the queue
+    detail view can show it before (and after) analysis has run."""
+    try:
+        image = await db.get_application_image(app_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if not image:
+        raise HTTPException(status_code=404, detail="No image on file for this application.")
+    image_bytes, filename = image
+    media_type = "image/png" if (filename or "").lower().endswith(".png") else "image/jpeg"
+    return Response(content=image_bytes, media_type=media_type)
 
 
 @router.get("/applications")
@@ -114,6 +171,7 @@ async def list_applications():
     items = [_summarize(r) for r in records]
     counts = {
         "all": len(items),
+        "pending_analysis": sum(1 for i in items if i["status"] == "pending_analysis"),
         "flagged": sum(1 for i in items if i["status"] == "flagged"),
         "needs_review": sum(1 for i in items if i["status"] == "needs_review"),
         "pending": sum(1 for i in items if i["status"] == "pending"),
