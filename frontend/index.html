@@ -864,7 +864,7 @@ function renderFieldCards(container, fields, opts) {
     if (f.field === "government_warning") {
       const banner = document.createElement("div");
       banner.className = "info-banner neutral";
-      banner.innerHTML = `<span>ℹ️</span><span>The government warning is held to a stricter, closer-to-verbatim standard than other fields — it's statutory language (27 CFR 16.21), not a paraphrasable field, so even minor wording or formatting differences are treated as a mismatch.</span>`;
+      banner.innerHTML = `<span>ℹ️</span><span>The government warning is held to a stricter, closer-to-verbatim standard than other fields — it's statutory language (27 CFR 16.21 for the required wording, 16.22 for the all-caps/bold header), not a paraphrasable field, so even minor wording or formatting differences are treated as a mismatch.</span>`;
       container.appendChild(banner);
     }
 
