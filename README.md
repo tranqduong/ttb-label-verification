@@ -205,6 +205,47 @@ out" for the importer-dump scenario Sarah described. This does mean the
 PII/retention question Marcus raised is now live for queued submissions
 (unlike the fully-stateless earlier build) — see "Known limitations."
 
+## Regulatory basis for each field
+
+The brief's field list (brand name, class/type, alcohol content, net
+contents, bottler name/address, country of origin for imports, government
+warning) is accurate, and here's exactly where each one comes from in 27
+CFR Part 5 (distilled spirits labeling — the beverage type this prototype's
+sample labels use; wine and beer have their own parallel parts, 4 and 7,
+with the same broad shape) and Part 16 (health warning), checked against
+eCFR directly rather than assumed from memory:
+
+- **Brand name, class/type, alcohol content** — 27 CFR 5.63(a): required
+  to appear together in the same field of vision. Class/type specifically
+  draws on the identity standards in 5.63(a)(2) / Subpart I; alcohol
+  content on 5.65.
+- **Net contents** — 27 CFR 5.63(b) / 5.70.
+- **Bottler/producer name and address** — 27 CFR 5.63(b), with the actual
+  requirement split by scenario: 5.66 (bottled domestically), 5.67
+  (imported in bulk, bottled domestically after import), or 5.68 (imported
+  already in the container it's sold in).
+- **Government warning wording** — 27 CFR 16.21 (the verbatim statement
+  text this tool compares against, after stripping punctuation-only
+  transcription noise — see `verification.py`).
+- **Government warning formatting (all-caps "GOVERNMENT WARNING:", bold
+  type)** — 27 CFR **16.22(a)(2)**, not 16.21. An earlier version of this
+  tool's field-result reason text cited 16.21 for every warning-statement
+  issue, wording and formatting alike; that's now split so a formatting
+  failure cites 16.22 and a wording failure cites 16.21, matching what's
+  actually in each section. (16.22 also sets minimum type size and a
+  contrast/conspicuousness requirement — not checked here, since this tool
+  only sees a photo, not the physical label's print size.)
+- **Country of origin (imports)** — this one is *not* actually a TTB Part 5
+  label mandate. §5.68(a) explicitly defers to U.S. Customs and Border
+  Protection's own marking rules (19 CFR parts 102 and 134) for country-of-
+  origin marking on imports; TTB's own label regulations don't separately
+  require the statement. In practice it's still worth checking here, since
+  it's a standard field on a COLA application for an import and TTB agents
+  do look for label/application consistency on it during review — but the
+  brief's framing of it as one of "TTB's" required elements is a shorthand
+  for what's actually a Customs requirement TTB also cares about, not a
+  27 CFR Part 5 citation the way the other fields are.
+
 ## Stack
 
 - **Backend:** Python, FastAPI, `anthropic` SDK for the vision call,
