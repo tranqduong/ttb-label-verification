@@ -16,12 +16,22 @@ scope per IT).
 ## How it works
 
 1. An agent uploads a photo of the label and the data filed in the
-   application (brand name, class/type, ABV, net contents, etc).
-2. The backend sends the image to a vision-capable LLM (Claude) with a
-   prompt that extracts the label's fields verbatim, including formatting
-   cues for the government warning (all-caps? bold?), and is instructed to
-   mark a field "UNREADABLE" (illegible, re-photograph might help) rather
-   than guess, distinct from a field that's simply absent from the label.
+   application (brand name, class/type, ABV, net contents, etc). This save
+   step (`POST /api/applications`) only writes the image + filed data to
+   the Application Queue as `pending_analysis` — it does **not** call the
+   vision model yet.
+2. Analysis is a separate, explicit step: opening the submission (or its
+   Application Queue record later) shows the label image on file and an
+   "Analyze Label" button. Clicking it (`POST /api/applications/{id}
+   /analyze`) is what sends the image to a vision-capable LLM (Claude) with
+   a prompt that extracts the label's fields verbatim, including
+   formatting cues for the government warning (all-caps? bold?), and is
+   instructed to mark a field "UNREADABLE" (illegible, re-photograph might
+   help) rather than guess, distinct from a field that's simply absent
+   from the label. Splitting submission from analysis this way — rather
+   than running both in one request — means a reviewer can browse a
+   backlog of saved label photos without every single one having paid for
+   a vision-extraction call just to land in the queue.
 3. A pure-Python comparison layer checks each field against the filed data
    and returns a three-tier verdict per field — **pass** / **needs
    review** / **fail** — with a plain-English reason. "Needs review" is
@@ -30,17 +40,20 @@ scope per IT).
    illegible field), and forcing those into a binary pass/fail either
    creates false rejections or silently swallows things a human should
    actually look at.
-4. Results render as Expected (filed) vs. Detected (on label) field cards,
-   each with a reviewer-facing badge (Match / Minor Variance / On Label /
-   Needs Review / Unreadable / Mismatch — see `badges.py`) — readable at a
-   glance, no hunting for buttons — with Approve / Reject / Flag actions an
-   agent can record against the result (Reject and Flag require a short
-   comment, per the brief's spec). The submission and the decision are both
-   persisted to the Application Queue (Postgres), so a reviewer can leave
-   and come back to it later.
+4. Once analysis runs, results render as Expected (filed) vs. Detected (on
+   label) field cards, each with a reviewer-facing badge (Match / Minor
+   Variance / On Label / Needs Review / Unreadable / Mismatch — see
+   `badges.py`) — readable at a glance, no hunting for buttons — with
+   Approve / Reject / Flag actions an agent can record against the result
+   (Reject and Flag require a short comment, per the brief's spec). The
+   submission, its analysis result, and the decision are all persisted to
+   the Application Queue (Postgres), so a reviewer can leave and come back
+   to it later.
 5. A batch mode accepts multiple label photos + a matching array of
-   application data and processes them concurrently. Batch stays stateless
-   by design — see "Application Queue scope" below.
+   application data and processes them concurrently, analyzing
+   immediately (there's no reviewer-facing queue to browse first in batch
+   mode). Batch stays stateless by design — see "Application Queue scope"
+   below.
 
 ## Why these specific design decisions
 
@@ -158,10 +171,13 @@ best practices:
 
 ### Application Queue scope
 
-Only **Single Label Review** submissions are queued — `POST
-/api/applications/verify` writes the application data, the extracted
-label fields, and the per-field results to Postgres, and the
-Approve/Flag/Reject decision + note persist against that same record.
+Only **Single Label Review** submissions are queued, and queuing is split
+into two steps: `POST /api/applications` writes the application data and
+the label image to Postgres as `pending_analysis` (no extraction yet),
+then `POST /api/applications/{id}/analyze` runs extraction against that
+stored image and fills in the field results, moving the record to
+`needs_review`. The Approve/Flag/Reject decision + note persist against
+that same record once analysis has run.
 **Batch Upload stays stateless**, deliberately: it still calls the
 original `/api/verify/batch` / `/api/verify/batch/stream` endpoints and
 returns results without saving them. Queuing 200-300 batch items would
@@ -273,16 +289,25 @@ cd sample_labels && python3 generate_samples.py
   "done", "result": {...}}` line with the same shape `/verify/batch`
   returns. The frontend's batch tab uses this endpoint for its live
   progress bar.
-- `POST /api/applications/verify` — same extraction + comparison as
-  `POST /api/verify`, but persists the result to the Application Queue
-  (Postgres) instead of returning it once and forgetting it. Every new
-  submission starts as `needs_review`. Returns 503 if no Postgres
-  connection string is configured (see Deployment).
+- `POST /api/applications` — multipart form: `label_image` (file) +
+  `application_data` (JSON string). Persists the image + filed data to the
+  Application Queue (Postgres) as `pending_analysis` — does **not** run
+  extraction. Returns 503 if no Postgres connection string is configured
+  (see Deployment).
+- `POST /api/applications/{id}/analyze` — runs the same extraction +
+  comparison as `POST /api/verify` against the image already on file for
+  that application, persists the result, and moves the record to
+  `needs_review`. Safe to call again (re-runs extraction and overwrites
+  the previous result).
+- `GET /api/applications/{id}/image` — serves back the label photo saved
+  with a submission, so the Queue detail view can show it before (and
+  after) analysis has run.
 - `GET /api/applications` — list all queued applications, with per-status
-  counts (`all` / `flagged` / `needs_review` / `pending` / `approved`) for
-  the Queue tab's filter chips.
+  counts (`all` / `pending_analysis` / `flagged` / `needs_review` /
+  `pending` / `approved`) for the Queue tab's filter chips.
 - `GET /api/applications/{id}` — full detail for one queued application,
-  including per-field results and reviewer-facing badges.
+  including per-field results and reviewer-facing badges (empty until
+  analysis has run).
 - `PATCH /api/applications/{id}` — record a reviewer decision:
   `{"status": "approved" | "flagged" | "pending", "note": "..."}`. `note`
   is required by the frontend (not the API schema) for `flagged`/`pending`.
@@ -371,6 +396,14 @@ brief's ask for "a working core application... with documented trade-offs":
   plus the retention-policy conversation Marcus flagged, now that
   application data and label photos' extracted text genuinely persist
   rather than being processed-and-discarded.
+- **Label photos are stored as raw bytes in Postgres (`BYTEA`), not
+  object storage.** Simplest thing that works for a prototype-scale queue
+  (one extra column, no S3/blob bucket to wire up), but it means every
+  image round-trips through the database connection on save, analyze, and
+  display, and the free-tier database's 0.5 GB cap will fill up faster
+  than it would with images in object storage and only a URL in Postgres.
+  A production version should move label photos to blob storage (S3,
+  Vercel Blob, etc.) and store a reference instead.
 - **Batch Upload results are still not persisted, by design.** See
   "Application Queue scope" above for the reasoning (no bulk-action UI in
   scope, CSV export already covers extraction). This means the
