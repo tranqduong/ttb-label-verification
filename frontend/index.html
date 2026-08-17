@@ -1636,9 +1636,32 @@ function renderApplicationDetail(record) {
       <input type="text" id="modal-note" placeholder="Add a note (optional)" value="${escapeHtml(record.note || "")}" />
     </div>
     <div id="modal-outcome" style="display:none; margin-top:14px; padding:12px 15px; border-radius:7px; font-size:13.5px; font-weight:600;"></div>
-    <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:18px;">
+      <button class="secondary" id="modal-close">Close</button>
+      <button type="button" id="modal-delete-btn" style="background:none; border:none; color:var(--fail); font-size:12.5px; font-weight:600; cursor:pointer; padding:6px 4px;">🗑️ Delete this submission</button>
+    </div>`;
 
   attachZoomPan(document.getElementById("modal-image-wrap"), document.getElementById("modal-image"));
+
+  // Permanently removes the record -- distinct from Reject, which keeps the
+  // submission in the queue with a "pending" status + note. Meant for
+  // clearing out a test/sample submission entirely, not for real review
+  // decisions (those should go through Approve/Flag/Reject instead).
+  document.getElementById("modal-delete-btn").addEventListener("click", async () => {
+    const label = record.display_id || record.application.brand_name || "this submission";
+    if (!confirm(`Delete ${label} from the Application Queue? This cannot be undone.`)) return;
+    try {
+      const resp = await fetch(`${API_BASE}/applications/${record.id}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.detail || "Could not delete this submission.");
+      }
+      document.getElementById("modal-backdrop").classList.remove("open");
+      loadQueue();
+    } catch (err) {
+      showDetailError(err.message);
+    }
+  });
 
   // No stored image bytes for this record (GET .../image 404s -- most often
   // an older queue row saved before image persistence existed) -- swap the
