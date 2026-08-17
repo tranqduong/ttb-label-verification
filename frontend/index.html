@@ -349,14 +349,14 @@
   .modal {
     background: var(--surface);
     border-radius: var(--radius);
-    padding: 26px 28px;
-    max-width: 700px;
-    max-height: 80vh;
+    padding: 28px 32px;
+    max-width: 820px;
+    max-height: 85vh;
     overflow-y: auto;
-    width: 90%;
+    width: 92%;
     box-shadow: 0 20px 50px rgba(0,0,0,0.25);
   }
-  .modal h3 { margin-top: 0; }
+  .modal h3 { margin-top: 0; font-size: 19px; }
 
   .progress-track {
     height: 8px;
@@ -472,18 +472,25 @@
   .field-card {
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    padding: 16px 18px;
-    margin-bottom: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
   }
   .field-card:last-child { margin-bottom: 0; }
-  .field-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-  .field-card-head .field-name { font-size: 14.5px; font-weight: 700; }
+  .field-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .field-card-head .field-name { font-size: 15px; font-weight: 700; }
   .fc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
-  @media (max-width: 560px) { .fc-grid { grid-template-columns: 1fr; gap: 10px 0; } }
-  .fc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 4px; }
-  .fc-value { font-size: 14px; color: var(--ink); word-break: break-word; }
+  @media (max-width: 560px) { .fc-grid { grid-template-columns: 1fr; gap: 14px 0; } }
+  /* Subtle background on the "Detected on label" side only -- makes the
+     Expected/Detected pairing scannable at a glance without relying on the
+     column headers alone, especially useful once several field cards are
+     stacked in the modal. */
+  .fc-col { padding: 10px 12px; border-radius: 6px; }
+  .fc-col-expected { background: transparent; }
+  .fc-col-detected { background: var(--canvas); }
+  .fc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 5px; }
+  .fc-value { font-size: 14.5px; line-height: 1.45; color: var(--ink); word-break: break-word; }
   .fc-value.muted { color: var(--ink-soft); font-style: italic; }
-  .fc-reason { font-size: 12.5px; color: var(--ink-soft); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+  .fc-reason { font-size: 13px; line-height: 1.5; color: var(--ink-soft); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 
   .detail-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
   .detail-note-wrap { margin-top: 14px; }
@@ -532,6 +539,24 @@
     -webkit-user-drag: none;
     will-change: transform;
   }
+  /* Shown in place of the label photo when GET .../image 404s -- e.g. a
+     queue record saved before image persistence existed, backfilled with
+     no stored bytes (see db.py's _ensure_schema migration comment). This
+     replaces a silent broken-image icon with a clear next step. */
+  .image-missing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 24px;
+    text-align: center;
+    color: var(--ink-soft);
+    cursor: default;
+  }
+  .image-missing-icon { font-size: 28px; opacity: 0.55; }
+  .image-missing-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .image-missing-hint { font-size: 12.5px; max-width: 340px; line-height: 1.5; }
   .zoom-controls { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
   .zoom-controls button.icon-btn {
     width: 32px; height: 32px;
@@ -877,11 +902,11 @@ function renderFieldCards(container, fields, opts) {
         <span class="badge ${meta.cls}">${meta.label}</span>
       </div>
       <div class="fc-grid">
-        <div>
+        <div class="fc-col fc-col-expected">
           <div class="fc-label">Expected (filed)</div>
           <div class="fc-value ${f.application_value ? "" : "muted"}">${f.application_value ? escapeHtml(f.application_value) : "(not provided)"}</div>
         </div>
-        <div>
+        <div class="fc-col fc-col-detected">
           <div class="fc-label">Detected on label</div>
           <div class="fc-value ${f.label_value ? "" : "muted"}">${f.label_value ? escapeHtml(f.label_value) : "(not found)"}</div>
         </div>
@@ -1614,6 +1639,26 @@ function renderApplicationDetail(record) {
     <button class="secondary" id="modal-close" style="margin-top:18px">Close</button>`;
 
   attachZoomPan(document.getElementById("modal-image-wrap"), document.getElementById("modal-image"));
+
+  // No stored image bytes for this record (GET .../image 404s -- most often
+  // an older queue row saved before image persistence existed) -- swap the
+  // broken-image icon for a clear empty state, and hide the zoom controls
+  // since there's nothing to zoom. "Request re-upload" stays visible; it's
+  // the actual fix (see promptReplaceImage / POST .../image).
+  document.getElementById("modal-image").addEventListener("error", () => {
+    const wrap = document.getElementById("modal-image-wrap");
+    if (!wrap) return;
+    wrap.innerHTML = `
+      <div class="image-missing">
+        <div class="image-missing-icon">🖼️</div>
+        <div class="image-missing-title">No image on file</div>
+        <div class="image-missing-hint">This submission doesn't have a stored label photo. Use "Request re-upload / Replace image" below to add one.</div>
+      </div>`;
+    ["zoom-in-btn", "zoom-out-btn", "zoom-reset-btn"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+  }, { once: true });
 
   const showDetailError = (msg) => {
     const box = document.getElementById("modal-detail-error");
