@@ -262,3 +262,19 @@ async def update_application_status(app_id: str, status: str, note: Optional[str
     finally:
         await conn.close()
     return _row_to_record(row) if row else None
+
+
+async def delete_application(app_id: str) -> bool:
+    """Permanently removes a queue record (application data, any stored
+    image bytes, analysis result, and reviewer note/status) -- e.g. a test
+    submission a reviewer wants out of the queue entirely, as opposed to
+    just rejecting/flagging it. Returns True if a row was actually deleted,
+    False if app_id didn't match anything (so the router can 404)."""
+    conn = await asyncpg.connect(_dsn(), statement_cache_size=0)
+    try:
+        await _ensure_schema(conn)
+        result = await conn.execute("DELETE FROM applications WHERE id = $1", app_id)
+    finally:
+        await conn.close()
+    # asyncpg's execute() returns a string like "DELETE 1" or "DELETE 0"
+    return result.split()[-1] != "0"
