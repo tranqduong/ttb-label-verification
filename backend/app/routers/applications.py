@@ -222,3 +222,18 @@ async def update_application(app_id: str, body: UpdateApplicationStatusRequest):
     if not record:
         raise HTTPException(status_code=404, detail="Application not found.")
     return _with_badges(record)
+
+
+@router.delete("/applications/{app_id}", status_code=204)
+async def delete_application(app_id: str):
+    """Permanently removes a queue record -- distinct from Approve/Flag/
+    Reject, which record a reviewer decision but keep the submission around.
+    Backs the queue detail view's "Delete" control, for e.g. a test/sample
+    submission a reviewer wants out of the queue entirely."""
+    try:
+        deleted = await db.delete_application(app_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    return Response(status_code=204)
